@@ -8,60 +8,11 @@
       "computedHash": "62469b7b8e594424cd313527c6b45e0749242a27955b1f80dcfc7f0c12d13d2d",
       "installMode": "copy"
     },
-    "adcreator": {
-      "source": "berkanceyhan/adcreatorstudio-skills",
-      "sourceType": "github",
-      "skillPath": "skills/video-ads/SKILL.md",
-      "computedHash": "036a3346c7f71ca3cea33f026f63324372e6d8fffbf6b9e015d11755e366934c",
-      "installMode": "copy"
-    },
-    "agent-media": {
-      "source": "gitroomhq/agent-media",
-      "sourceType": "github",
-      "skillPath": "skills/agent-media/SKILL.md",
-      "computedHash": "063b8eff3582464ab95b8c1c395ace1e38d4e88b1e012cc03d78c91bf22f0ea7",
-      "installMode": "copy"
-    },
-    "ai-video-generation": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/ai-video-generation/SKILL.md",
-      "computedHash": "9eb30e949e4f6fe59626c0ffa672fd7d60a4b2b226fd890f66a7b229fc54a41c",
-      "installMode": "copy"
-    },
-    "explainer-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/explainer-video/SKILL.md",
-      "computedHash": "bba594524880b1c9149ae9de05d17eac7b1a164b20e1b3a9ccfe0ab4971af4b7",
-      "installMode": "copy"
-    },
-    "fal-ai-media": {
-      "source": "affaan-m/everything-claude-code",
-      "sourceType": "github",
-      "skillPath": "skills/fal-ai-media/SKILL.md",
-      "computedHash": "51e8146cb99207c8d8f7e5c8634c4eea8e0a58e8de643a9746c4671ace62fbad",
-      "installMode": "copy"
-    },
     "figma": {
       "source": "heygen-com/hyperframes",
       "sourceType": "github",
       "skillPath": "skills/figma/SKILL.md",
       "computedHash": "c7593153c627ecb96d93c65d6908475cc3f7faefc398c0b9176b15063e917e2e",
-      "installMode": "copy"
-    },
-    "founder-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/founder-video/SKILL.md",
-      "computedHash": "3149a00c903b976594eaaa1d4eb2d57fc9fe2daed911d146d525d34a5fd9e5ed",
-      "installMode": "copy"
-    },
-    "higgsfield-generate": {
-      "source": "higgsfield-ai/skills",
-      "sourceType": "github",
-      "skillPath": "higgsfield-generate/SKILL.md",
-      "computedHash": "06d828993a78cb7d4662db0d30f2be18280083fccaa542d08740110c7cc64bdc",
       "installMode": "copy"
     },
     "hyperframes": {
@@ -92,88 +43,11 @@
       "computedHash": "bbbb2bcb11fb43c9dd7e7f927a5617affee0458864fe4b3582e644d70aa1e10f",
       "installMode": "copy"
     },
-    "image-to-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/image-to-video/SKILL.md",
-      "computedHash": "23a2cd62946bb13d7e19f0671f485b072d29e1162bbbfcb336f3ac9987c0ee9a",
-      "installMode": "copy"
-    },
-    "imagine": {
-      "source": "WhiteTowerAI/imagine-skill",
-      "sourceType": "github",
-      "skillPath": "skills/imagine/SKILL.md",
-      "computedHash": "b70f789bcc2bac7f26d647ceacc967c8f6b6db1e8120c669debe3973bb129165",
-      "installMode": "copy"
-    },
-    "imagine-create": {
-      "source": "WhiteTowerAI/imagine-skill",
-      "sourceType": "github",
-      "skillPath": "skills/imagine-create/SKILL.md",
-      "computedHash": "9289704a7cf969b11c8f7ec189716d5437d125e9abcc0993c746510fae19507c",
-      "installMode": "copy"
-    },
-    "imagine-models": {
-      "source": "WhiteTowerAI/imagine-skill",
-      "sourceType": "github",
-      "skillPath": "skills/imagine-models/SKILL.md",
-      "computedHash": "dcc540ed2f720aff1cd263feba55dc555ead4b87ef2ab5471b18f7fb1880070a",
-      "installMode": "copy"
-    },
-    "imagine-prompt": {
-      "source": "WhiteTowerAI/imagine-skill",
-      "sourceType": "github",
-      "skillPath": "skills/imagine-prompt/SKILL.md",
-      "computedHash": "7e2e7332930d44aa282b221cca84126f1b0247b6f0d930d1197c1ca4f62c381c",
-      "installMode": "copy"
-    },
-    "imagine-tasks": {
-      "source": "WhiteTowerAI/imagine-skill",
-      "sourceType": "github",
-      "skillPath": "skills/imagine-tasks/SKILL.md",
-      "computedHash": "3ac704cba5b0e8b822c9a3393a3c6770f6d77d21a8eec932b3959877d35e29b4",
-      "installMode": "copy"
-    },
-    "launch-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/launch-video/SKILL.md",
-      "computedHash": "3414c45017c08d24236d653703eeca9199e7ad16e8a7df7448942e84e5b99bd1",
-      "installMode": "copy"
-    },
-    "make-a-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/make-a-video/SKILL.md",
-      "computedHash": "da214eca7eee538b9bc98bd7db3bd64bbed14d3fde7f8e11d382bc49471065b9",
-      "installMode": "copy"
-    },
     "media-use": {
       "source": "heygen-com/hyperframes",
       "sourceType": "github",
       "skillPath": "skills/media-use/SKILL.md",
       "computedHash": "87023e34ceeff40e34f9a5e2dbb6738a4e522ac92a5436a786171b1bc82ad0e5",
-      "installMode": "copy"
-    },
-    "pexo-agent": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/pexo-agent/SKILL.md",
-      "computedHash": "33d9b3df49c21145a0ce81cbae7c85f97111f2944503716067082ba5d5b9407c",
-      "installMode": "copy"
-    },
-    "product-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/product-video/SKILL.md",
-      "computedHash": "36f2e26dc0560b361e74024a8a19823315c911e94eac980779982cc42f7d128f",
-      "installMode": "copy"
-    },
-    "publish-to-social": {
-      "source": "gitroomhq/agent-media",
-      "sourceType": "github",
-      "skillPath": "skills/publish-to-social/SKILL.md",
-      "computedHash": "4449ae70a24c37b75b114d2ac8b7f51887898636efaa5c7597c00f34b01ec1e9",
       "installMode": "copy"
     },
     "remotion-best-practices": {
@@ -281,20 +155,6 @@
       "computedHash": "645c3599ee3e3ebb7b53d6954b0417bd5f04d4e8dc78c3cf512deb0478256c66",
       "installMode": "copy"
     },
-    "saas-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/saas-video/SKILL.md",
-      "computedHash": "b03f5d493e1a45c6e152178bd048b6c7f4829d74813f60d011ea5b6713fee8a7",
-      "installMode": "copy"
-    },
-    "seedance-2.0-prompter": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/seedance-2.0-prompter/SKILL.md",
-      "computedHash": "629323797489f9df4484f359827e0598e951a94f5130cb54f3d880422275486c",
-      "installMode": "copy"
-    },
     "slideshow": {
       "source": "heygen-com/hyperframes",
       "sourceType": "github",
@@ -302,95 +162,11 @@
       "computedHash": "14d0bf700a7bcb264b60e7c8b786f8883d75d038c2ce93e7fc29ccddd7002744",
       "installMode": "copy"
     },
-    "startup-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/startup-video/SKILL.md",
-      "computedHash": "5d2b8da069d445b4ddbcd650affbb949d88fbac74f324bdb353f843965d8f04c",
-      "installMode": "copy"
-    },
     "style-sampling": {
       "source": "heygen-com/hyperframes",
       "sourceType": "github",
       "skillPath": "skills/style-sampling/SKILL.md",
       "computedHash": "2caf1b78cc777fff9ca2754ca042ee5810f90dd88279c82d1dee29df8edfd4fa",
-      "installMode": "copy"
-    },
-    "text-to-video": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/text-to-video/SKILL.md",
-      "computedHash": "a698176c296fb7f68f9e38137adfb2517d333fc231ed67d8ec30f5c17c07a6e7",
-      "installMode": "copy"
-    },
-    "tiktok-video-ad": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/tiktok-video-ad/SKILL.md",
-      "computedHash": "77c5e184854ab60d06cf3ac75553b9c4899d3cd739e216c3773040eacb4db530",
-      "installMode": "copy"
-    },
-    "ugc-ads": {
-      "source": "pika-labs/pika-plugins",
-      "sourceType": "github",
-      "skillPath": "skills/ugc-ads/SKILL.md",
-      "computedHash": "b1bd1d66e015604170eadc1e8da9483ab5d3ce9ab3d1823a8ede90e810957dab",
-      "installMode": "copy"
-    },
-    "veo-3.2-prompter": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/veo-3.2-prompter/SKILL.md",
-      "computedHash": "3d50c920988c7d442d63f59ab0c46f1827cae9f9c3dd2b2268dff03cd9671c42",
-      "installMode": "copy"
-    },
-    "veo-use": {
-      "source": "cnemri/google-genai-skills",
-      "sourceType": "github",
-      "skillPath": "skills/veo-use/SKILL.md",
-      "computedHash": "93fff067175d11a90a79ac1dd6aef210e9915539a24a9b38c930e05cbb14a7e8",
-      "installMode": "copy"
-    },
-    "video-ad": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/video-ad/SKILL.md",
-      "computedHash": "11d8ebbc828b6838b2b32da8a8cc9f16a27896b101ddb6d5aeeaa6a0de6e4747",
-      "installMode": "copy"
-    },
-    "videoagent-audio-studio": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/videoagent-audio-studio/SKILL.md",
-      "computedHash": "feb52bd9b3d05f31569e307fcc9ddc4d4d8ec5281f43f271be4b7c56045341b4",
-      "installMode": "copy"
-    },
-    "videoagent-director": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/videoagent-director/SKILL.md",
-      "computedHash": "583d3a9d697bf205981fc23ddd49dca523b46daafdd0d22a792cd376fd6b9ecd",
-      "installMode": "copy"
-    },
-    "videoagent-image-studio": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/videoagent-image-studio/SKILL.md",
-      "computedHash": "73a857d1a2a51dde71128a3a716482d7f876d63a89bee92f10b2f46d907d4842",
-      "installMode": "copy"
-    },
-    "videoagent-video-studio": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/videoagent-video-studio/SKILL.md",
-      "computedHash": "6b680136146f3776e5706a066440432456b2dcf27e674ac6650aedc00ceca940",
-      "installMode": "copy"
-    },
-    "youtube-short-maker": {
-      "source": "pexoai/pexo-skills",
-      "sourceType": "github",
-      "skillPath": "skills/youtube-short-maker/SKILL.md",
-      "computedHash": "7d30264d98f03d297d0dc00087168dafc28e04509e9ef059e4b313b5a7831109",
       "installMode": "copy"
     }
   }
