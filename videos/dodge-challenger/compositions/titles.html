@@ -1,0 +1,251 @@
+<template>
+  <style>
+    #root {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      font-family: "Inter", sans-serif;
+      color: #f4f2ef;
+    }
+    #root .bar {
+      position: absolute;
+      left: 0;
+      width: 1920px;
+      height: 138px;
+      background: #000;
+      z-index: 20;
+    }
+    #t-bar-top { top: 0; }
+    #t-bar-bot { bottom: 0; }
+    #t-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 75% 70% at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.6) 100%);
+      z-index: 5;
+    }
+    #t-fadein {
+      position: absolute;
+      inset: 0;
+      background: #000;
+      z-index: 15;
+    }
+    #t-flash {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      z-index: 16;
+      opacity: 0;
+    }
+    /* chapter kickers, lower left inside the picture */
+    #root .kicker {
+      position: absolute;
+      left: 192px;
+      bottom: 186px;
+      z-index: 10;
+      font-weight: 700;
+      font-size: 28px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    #root .kicker .num { color: var(--accent, #e3262f); }
+    #root .kicker .rule {
+      display: block;
+      width: 56px;
+      height: 2px;
+      background: rgba(244, 242, 239, 0.7);
+    }
+    #root .big {
+      position: absolute;
+      z-index: 10;
+      font-family: "League Gothic", "Oswald", sans-serif;
+      text-transform: uppercase;
+      line-height: 0.86;
+      white-space: nowrap;
+    }
+    #t-wide {
+      left: 192px;
+      top: 250px;
+      font-size: 300px;
+      letter-spacing: 0.01em;
+    }
+    #t-wide span { display: inline-block; }
+    #t-lb {
+      right: 192px;
+      top: 212px;
+      font-size: 120px;
+      letter-spacing: 0.06em;
+      text-align: right;
+    }
+    #t-lb em { font-style: normal; color: var(--accent, #e3262f); }
+    #t-perm {
+      right: 192px;
+      top: 168px;
+      font-size: 168px;
+      text-align: right;
+    }
+    #t-perm .accent { color: var(--accent, #e3262f); }
+    #t-hero {
+      left: 0;
+      width: 1920px;
+      top: 196px;
+      text-align: center;
+      font-size: 210px;
+      letter-spacing: 0.02em;
+    }
+    #t-hero-sub {
+      position: absolute;
+      left: 0;
+      width: 1920px;
+      top: 392px;
+      z-index: 10;
+      text-align: center;
+      font-weight: 700;
+      font-size: 30px;
+      letter-spacing: 0.6em;
+      text-transform: uppercase;
+    }
+    #t-hero-sub em { font-style: normal; color: var(--accent, #e3262f); }
+    /* end card */
+    #t-end {
+      position: absolute;
+      left: 0;
+      width: 1920px;
+      top: 180px;
+      z-index: 10;
+      text-align: center;
+    }
+    #t-end-title {
+      font-family: "League Gothic", "Oswald", sans-serif;
+      font-size: 250px;
+      line-height: 0.86;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      display: inline-block;
+    }
+    #t-end-rule {
+      width: 120px;
+      height: 4px;
+      background: var(--accent, #e3262f);
+      margin: 22px auto 22px;
+    }
+    #t-end-sub {
+      font-weight: 700;
+      font-size: 30px;
+      letter-spacing: 0.6em;
+      text-transform: uppercase;
+      display: inline-block;
+      padding-left: 0.6em;
+    }
+    #t-credits {
+      position: absolute;
+      left: 192px;
+      right: 192px;
+      bottom: 150px;
+      z-index: 21;
+      text-align: center;
+      font-size: 22px;
+      line-height: 1.5;
+      color: rgba(244, 242, 239, 0.82);
+      letter-spacing: 0.02em;
+    }
+  </style>
+
+  <div id="root" data-composition-id="titles" data-width="1920" data-height="1080">
+    <div id="t-vignette" data-layout-ignore></div>
+    <div id="t-bar-top" class="bar" data-layout-ignore></div>
+    <div id="t-bar-bot" class="bar" data-layout-ignore></div>
+    <div id="t-fadein" class="clip" data-start="0" data-duration="1.6" data-track-index="1" data-layout-ignore></div>
+    <div id="t-flash" class="clip" data-start="22.4" data-duration="0.8" data-track-index="1" data-layout-ignore></div>
+
+    <!-- 01 -->
+    <div id="t-k1" class="kicker clip" data-start="1.6" data-duration="2.8" data-track-index="2">
+      <span id="t-k1-in" class="kicker-in" style="display: flex; align-items: center; gap: 18px">
+        <span class="num">01</span><span class="rule"></span><span>Ignición</span>
+      </span>
+    </div>
+    <!-- 02 -->
+    <div id="t-k2" class="kicker clip" data-start="5.2" data-duration="3.7" data-track-index="2">
+      <span id="t-k2-in" class="kicker-in" style="display: flex; align-items: center; gap: 18px">
+        <span class="num">02</span><span class="rule"></span><span>Llantas forjadas · Pasos de rueda ensanchados</span>
+      </span>
+    </div>
+    <!-- 03 WIDEBODY -->
+    <div id="t-wide" class="big clip" data-start="9.55" data-duration="3.9" data-track-index="3">
+      <span id="t-wide-in">Widebody</span>
+    </div>
+    <!-- 04 -->
+    <div id="t-lb" class="big clip" data-start="14.0" data-duration="3.95" data-track-index="3">
+      <span id="t-lb-in" style="display: inline-block">LB<em>★</em>Performance</span>
+    </div>
+    <!-- 05 -->
+    <div id="t-perm" class="big clip" data-start="19.2" data-duration="3.25" data-track-index="3">
+      <span id="t-perm-a" style="display: block">Sin</span>
+      <span id="t-perm-b" style="display: block" class="accent">permiso.</span>
+    </div>
+    <!-- 06 payoff -->
+    <div id="t-hero" class="big clip" data-start="23.3" data-duration="3.65" data-track-index="3">
+      <span id="t-hero-in" style="display: inline-block">Dodge Challenger</span>
+    </div>
+    <div id="t-hero-sub" class="clip" data-start="23.7" data-duration="3.25" data-track-index="4">
+      <span id="t-hero-sub-in" style="display: inline-block">LB<em>★</em>Performance · 2015</span>
+    </div>
+    <!-- 07 end card -->
+    <div id="t-end" class="clip" data-start="27.0" data-duration="4.5" data-track-index="3">
+      <div id="t-end-title">Challenger</div>
+      <div id="t-end-rule"></div>
+      <div id="t-end-sub">LB★Performance</div>
+    </div>
+    <div id="t-credits" class="clip" data-layout-ignore data-start="27.6" data-duration="3.9" data-track-index="4">
+      Modelo 3D «2015 Dodge Challenger LB★PERFORMANCE» de Ddiaz Design (Sketchfab) · CC BY-NC-SA 4.0<br />
+      Música «Fusion – Dark Epic Trailer» de E. Erkut (Jamendo) · CC BY 3.0
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // open from black, the headlights do the reveal
+    tl.fromTo("#t-fadein", { opacity: 1 }, { opacity: 0, duration: 1.4, ease: "power2.in" }, 0.15);
+
+    // kickers: slide in, hold, fade before the cut
+    [["#t-k1-in", 1.6, 4.4], ["#t-k2-in", 5.2, 8.9]].forEach(([sel, a, b]) => {
+      tl.fromTo(sel, { opacity: 0, x: -28 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, a);
+      tl.to(sel, { opacity: 0, duration: 0.3, ease: "power2.in" }, b - 0.35);
+    });
+
+    // WIDEBODY: slams in on the bass hit, then drifts
+    tl.fromTo("#t-wide-in", { opacity: 0, scale: 1.35, filter: "blur(18px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.28, ease: "power4.out", transformOrigin: "0% 50%" }, 9.6);
+    tl.fromTo("#t-wide-in", { x: 0 }, { x: 60, duration: 3.5, ease: "none" }, 9.88);
+    tl.to("#t-wide-in", { opacity: 0, filter: "blur(10px)", duration: 0.3, ease: "power2.in" }, 13.1);
+
+    // LB★PERFORMANCE: tracking-in
+    tl.fromTo("#t-lb-in", { opacity: 0, scaleX: 1.3, x: 80, filter: "blur(8px)" }, { opacity: 1, scaleX: 1, x: 0, filter: "blur(0px)", duration: 0.9, ease: "power3.out", transformOrigin: "100% 50%" }, 14.2);
+    tl.to("#t-lb-in", { opacity: 0, duration: 0.3, ease: "power2.in" }, 17.6);
+
+    // SIN PERMISO.: two beats
+    tl.fromTo("#t-perm-a", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 19.25);
+    tl.fromTo("#t-perm-b", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 19.81);
+    tl.to(["#t-perm-a", "#t-perm-b"], { opacity: 0, duration: 0.2, ease: "power2.in" }, 22.2);
+
+    // payoff flash
+    tl.fromTo("#t-flash", { opacity: 0 }, { opacity: 0.9, duration: 0.04, ease: "none" }, 22.46);
+    tl.to("#t-flash", { opacity: 0, duration: 0.45, ease: "power2.out" }, 22.5);
+
+    // DODGE CHALLENGER slam on the voice
+    tl.fromTo("#t-hero-in", { opacity: 0, scale: 1.25, filter: "blur(14px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.3, ease: "power4.out" }, 23.35);
+    tl.fromTo("#t-hero-sub-in", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 23.75);
+    tl.to(["#t-hero-in", "#t-hero-sub-in"], { opacity: 0, duration: 0.3, ease: "power2.in" }, 26.6);
+
+    // end card
+    tl.fromTo("#t-end-title", { opacity: 0, scale: 1.12, filter: "blur(12px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.45, ease: "power4.out" }, 27.02);
+    tl.fromTo("#t-end-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power3.inOut" }, 27.35);
+    tl.fromTo("#t-end-sub", { opacity: 0, scaleX: 1.25 }, { opacity: 1, scaleX: 1, duration: 0.9, ease: "power3.out" }, 27.5);
+    tl.fromTo("#t-credits", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 27.6);
+    tl.to(["#t-end-title", "#t-end-rule", "#t-end-sub", "#t-credits"], { opacity: 0, duration: 0.9, ease: "power2.in" }, 30.45);
+
+    window.__timelines["titles"] = tl;
+  </script>
+</template>
