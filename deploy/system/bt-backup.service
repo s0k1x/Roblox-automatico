@@ -1,0 +1,8 @@
+[Unit]
+Description=Copia de seguridad de Balón Turbo
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/bt-ctl backup
+Nice=10
+IOSchedulingClass=idle
