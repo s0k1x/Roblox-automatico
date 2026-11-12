@@ -213,3 +213,8 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
 #menu.in-settings .spanel .chk{margin:6px 0}
 #menu.in-settings .seg.tabs{margin-bottom:6px}
 .t-wrap{margin-top:-22vh}
+
+/* selector de mapa */
+.seg.maps button{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:6px;min-height:0;font-size:13px}
+.seg.maps .mp{display:block;height:46px;border-radius:5px;border:1px solid #ffffff22}
+.seg.maps b{font-weight:inherit;letter-spacing:.03em}

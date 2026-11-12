@@ -961,7 +961,7 @@ export function createRenderer(canvas) {
     scene.background = classicBg; scene.fog = classicFog;
     if (!isClassic) {
       theme = buildTheme(THREE, scene, id);
-      if (theme) scene.add(theme.group);
+      if (theme) { scene.add(theme.group); if (theme.setQuality) theme.setQuality(quality === 'baja'); }
       else { for (const o of classicObjs) o.visible = true; mapId = 'clasico'; }
     }
   }
@@ -1252,6 +1252,7 @@ export function createRenderer(canvas) {
       quality = q === 'baja' ? 'baja' : 'alta';
       qf = quality === 'baja' ? 0.4 : 1;
       surroundings.setQuality(quality === 'baja');
+      if (theme && theme.setQuality) theme.setQuality(quality === 'baja');
       renderer.setPixelRatio(quality === 'baja' ? 1 : Math.min(window.devicePixelRatio || 1, 2));
       size = { w: 0, h: 0 };
     },

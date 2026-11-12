@@ -4,6 +4,7 @@ import { hostRoom, joinRoom } from './net.js';
 import { createInput } from './input.js';
 import { createRenderer } from './render.js';
 import { createAudio } from './audio.js';
+import { MAPS } from './maps.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -26,7 +27,7 @@ const CAM_PRESETS = {
 const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', ...CAM_PRESETS.default, ballcamDefault: false,
   camPreset: 'default', shake: true, swivel: 5, transition: 1, invertLook: false,
   rumble: true, showNames: true, stickSens: 100,
-  botLevel: 1, infBoost: false, quality: 'alta', fpsLimit: 0, showFps: false,
+  botLevel: 1, map: 'clasico', infBoost: false, quality: 'alta', fpsLimit: 0, showFps: false,
   showSpeed: true, showScore: true, uiScale: 100,
   volMaster: 80, volSfx: 80, volEngine: 60, volMusic: 50,
   challenges: { week: '', prog: {} },
@@ -85,6 +86,7 @@ for (const items of Object.values(SCHEMA)) for (const it of items) {
 }
 if (![30, 60].includes(cfg.fpsLimit)) cfg.fpsLimit = 0;
 if (cfg.quality !== 'baja') cfg.quality = 'alta';
+if (!MAPS.some((m) => m.id === cfg.map)) cfg.map = 'clasico';
 if (!['default', 'close', 'far', 'custom'].includes(cfg.camPreset) ||
   (cfg.camPreset !== 'custom' && Object.keys(CAM_PRESETS.default).some((k) => cfg[k] !== CAM_PRESETS[cfg.camPreset][k]))) cfg.camPreset = 'custom';
 
@@ -105,6 +107,7 @@ function applyUI() {
 function applyAll() {
   applyCam(); applyAudio(); applyUI();
   R('setQuality', cfg.quality);
+  R('setMap', cfg.map);
   R('setShowNames', cfg.showNames);
 }
 
@@ -216,12 +219,22 @@ function markSel() {
     row.querySelector('.pick').value = cur;
   }
 }
+// Selector de mapa (miniatura + nombre) en Contra bots, Crear sala y Entrenamiento
+for (const seg of document.querySelectorAll('.seg.maps')) {
+  for (const m of MAPS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.v = m.id;
+    b.innerHTML = `<span class="mp" style="background:${m.thumb || '#16213a'}"></span><b>${m.name}</b>`;
+    seg.appendChild(b);
+  }
+}
 for (const seg of document.querySelectorAll('.seg[data-key]')) {
   for (const b of seg.children) b.addEventListener('click', () => {
     const k = seg.dataset.key;
     cfg[k] = typeof DEFAULTS[k] === 'number' ? +b.dataset.v : b.dataset.v;
     save(); markSel();
     if (k === 'quality') renderer.setQuality(cfg.quality);
+    if (k === 'map') R('setMap', cfg.map);
   });
 }
 markSel();
@@ -572,7 +585,7 @@ function toMenu(message) {
   if (ws) { try { ws.close(); } catch (e) { /* nada */ } ws = null; }
   if (host) { try { host.close(); } catch (e) { /* nada */ } host = null; hostHumans.clear(); }
   mode = 'menu'; game = null; latest = null; snaps = []; paused = false;
-  applyAudio(); audio.menu(true);
+  applyAudio(); audio.menu(true); R('setMap', cfg.map);
   show('menu', true); show('hud', false); show('pause', false); show('endscreen', false);
   msg(message);
   resetPadMenu();
@@ -580,14 +593,14 @@ function toMenu(message) {
 }
 
 function startLocal() {
-  game = new Game({ teamSize: cfg.teamSize, botLevel: cfg.botLevel });
+  game = new Game({ teamSize: cfg.teamSize, botLevel: cfg.botLevel, map: cfg.map });
   game.setHuman(0, playerName(), cfg.hitbox, cfg.paint);
   myCarId = 0; acc = 0; pendingEvents = [];
   enterGame('local');
 }
 
 function startTraining() {
-  game = new Game({ freePlay: true, infiniteBoost: !!cfg.infBoost });
+  game = new Game({ freePlay: true, infiniteBoost: !!cfg.infBoost, map: cfg.map });
   game.setHuman(0, playerName(), cfg.hitbox, cfg.paint);
   myCarId = 0; acc = 0; pendingEvents = [];
   enterGame('local');
@@ -607,7 +620,7 @@ function pickCar() {
 
 async function startHost() {
   msg('Creando sala…');
-  game = new Game({ teamSize: cfg.teamSize });
+  game = new Game({ teamSize: cfg.teamSize, map: cfg.map });
   game.setHuman(0, playerName(), cfg.hitbox, cfg.paint);
   myCarId = 0; acc = 0; pendingEvents = []; netEvents = []; tickCount = 0; hostHumans.clear();
   try {
