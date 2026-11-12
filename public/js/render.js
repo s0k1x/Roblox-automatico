@@ -209,10 +209,10 @@ function buildSky(scene) {
     g.addColorStop(0, '#04061a'); g.addColorStop(0.32, '#10194a'); g.addColorStop(0.46, '#3a2a63');
     g.addColorStop(0.5, '#c4577a'); g.addColorStop(0.52, '#1a1738'); g.addColorStop(1, '#090c1c');
     c.fillStyle = g; c.fillRect(0, 0, w, h);
-    for (let i = 0; i < 520; i++) {
+    for (let i = 0; i < 260; i++) {
       const y = Math.random() * h * 0.42;
-      c.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.7})`;
-      const s = Math.random() < 0.1 ? 2 : 1;
+      c.fillStyle = `rgba(255,255,255,${0.2 + Math.random() * 0.45})`;
+      const s = 1;
       c.fillRect(Math.random() * w, y, s, s);
     }
   });
@@ -566,14 +566,15 @@ function buildStadium(scene) {
   root.add(walls);
 
   // Marco luminoso: bandas a ras de suelo y de techo, y postes en las aristas redondeadas
-  const frameMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  const frameMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
   const frames = [
     wallBand(wd.smp, 300, 372, 'all'),
     wallBand(wd.smp, H - 372, H - 300, 'all'),
     wallBand(wd.smp, 300, H - 300, 'post'),
     wallBand(wd.smp, GH, GH + 26, 'all'),
   ];
-  for (const g of frames) { const m = new THREE.Mesh(g, frameMat); m.renderOrder = 3; root.add(m); }
+  const postMat = frameMat.clone(); postMat.opacity = 0.4;
+  frames.forEach((g, i) => { const m = new THREE.Mesh(g, i === 2 ? postMat : frameMat); m.renderOrder = 3; root.add(m); });
 
   // Porterías
   const netTex = canvasTex(64, 64, (c, w, h) => {
@@ -929,8 +930,9 @@ export function createRenderer(canvas) {
   const camera = new THREE.PerspectiveCamera(70, 16 / 9, 10, 40000);
   camera.up.set(0, 0, 1);
 
-  scene.add(new THREE.HemisphereLight(0xdbe8ff, 0x4a5a80, 1.9));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+  scene.add(new THREE.HemisphereLight(0xe6efff, 0x6a7aa0, 2.6));
+  scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.0);
   sun.position.set(-1500, 2000, 4000);
   scene.add(sun);
 
@@ -998,6 +1000,7 @@ export function createRenderer(canvas) {
   let camSettings = { ...DEFAULT_CAM };
   let ballCam = false;
   let showHitbox = false;
+  let showNames = true;
   const look = { x: 0, y: 0 };
   const cam = { dir: new THREE.Vector2(0, 1), blend: 0, pos: new THREE.Vector3(0, -3000, 800), init: false, orbit: 0, lx: 0, ly: 0, shake: 0 };
   const tv = new THREE.Vector3(), tv2 = new THREE.Vector3(), tv3 = new THREE.Vector3(), tf = new THREE.Vector3(), tu = new THREE.Vector3(), tl = new THREE.Vector3();
@@ -1151,10 +1154,11 @@ export function createRenderer(canvas) {
     ensureShowcase(pv);
     setMenuFov();
     const garage = pv.view === 'garage';
+    const title = pv.view === 'title', home = pv.view === 'home';
     showAng += dt * (garage ? 0.55 : 0.32);
     cam.orbit += dt * 0.07;
     const C = [0, -700, 17];
-    const r0 = garage ? 340 : 380;
+    const r0 = garage ? 340 : title ? 580 : home ? 470 : 380;
     const r = camera.aspect < 1 ? r0 * Math.min(1.9, 0.95 / Math.max(0.3, camera.aspect)) : r0;
     const a = cam.orbit + 0.9;
     const h = garage ? 95 : 120;
@@ -1166,7 +1170,9 @@ export function createRenderer(canvas) {
     const vh = r * Math.tan(camera.fov * D2R / 2);
     const aspect = camera.aspect;
     let tx = C[0], ty = C[1], tz = C[2] + 12;
-    if (aspect >= 1) { const sh = vh * aspect * 0.3; tx -= rx * sh; ty -= ry * sh; }
+    if (title) { tz += vh * (aspect >= 1 ? 0.5 : 0.35); } // coche centrado abajo, logo arriba
+    else if (home) { const sh = vh * aspect * 0.2; tx -= rx * sh; ty -= ry * sh; tz += vh * 0.04; } // centrado entre el menú y el panel de desafíos
+    else if (aspect >= 1) { const sh = vh * aspect * 0.3; tx -= rx * sh; ty -= ry * sh; }
     else { tz -= vh * 0.5; }
     camera.lookAt(tx, ty, tz);
 
@@ -1211,6 +1217,7 @@ export function createRenderer(canvas) {
       look.y = clamp(+y || 0, -1, 1);
     },
     setBallCam(v) { ballCam = !!v; },
+    setShowNames(v) { showNames = !!v; },
     setShowHitbox(v) { showHitbox = !!v; },
     setQuality(q) {
       quality = q === 'baja' ? 'baja' : 'alta';
@@ -1305,7 +1312,7 @@ export function createRenderer(canvas) {
         if (o.name !== c.name) { scene.remove(o.label); o.label = nameSprite(c.name, c.team); scene.add(o.label); o.name = c.name; }
         const vis = !c.dead;
         o.grp.visible = vis;
-        o.label.visible = vis && c.id !== myCarId;
+        o.label.visible = vis && showNames && c.id !== myCarId;
         o.shadow.visible = vis;
         o.grp.getObjectByName('wire').visible = showHitbox;
         if (!vis) continue;
