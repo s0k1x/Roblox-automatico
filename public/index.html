@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Balón Turbo</title>
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="scoreboard">
+    <span id="sc-blue" class="score blue">0</span>
+    <span id="clock">5:00</span>
+    <span id="sc-orange" class="score orange">0</span>
+  </div>
+  <div id="room-code" class="hidden"></div>
+  <div id="ballcam-ind" class="hidden">Cámara balón</div>
+  <div id="countdown"></div>
+  <div id="banner"></div>
+  <div id="sub-banner"></div>
+  <div id="speed"><b id="speed-val">0</b><small>km/h</small></div>
+  <div id="boost">
+    <svg viewBox="0 0 120 120" width="150" height="150">
+      <circle cx="60" cy="60" r="52" class="bg"/>
+      <circle id="boost-arc" cx="60" cy="60" r="52" class="fg" transform="rotate(-90 60 60)"/>
+    </svg>
+    <span id="boost-val">33</span>
+  </div>
+  <div id="conn" class="hidden">Conexión perdida</div>
+</div>
+
+<div id="endscreen" class="overlay hidden">
+  <div class="panel">
+    <h2 id="end-title">Fin del partido</h2>
+    <div id="end-score"></div>
+    <table id="end-table"><thead><tr><th>Jugador</th><th>Goles</th><th>Paradas</th><th>Tiros</th><th>Demos</th></tr></thead><tbody></tbody></table>
+    <div class="row"><button id="btn-rematch" class="primary">Revancha</button><button id="btn-end-menu">Menú</button></div>
+  </div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <div class="panel small">
+    <h2>Pausa</h2>
+    <div class="row col">
+      <button id="btn-resume" class="primary">Continuar</button>
+      <button id="btn-pause-settings">Ajustes de cámara</button>
+      <button id="btn-pause-menu">Salir al menú</button>
+    </div>
+  </div>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>BALÓN <span>TURBO</span></h1>
+    <p class="tag">Fútbol con coches. Sin descanso, sin frenos.</p>
+    <div class="grid">
+      <section>
+        <label>Tu nombre<input id="in-name" maxlength="16" placeholder="Piloto" autocomplete="off"></label>
+        <div class="lbl">Modo</div>
+        <div class="seg" id="seg-mode">
+          <button data-n="1" class="on">1v1</button><button data-n="2">2v2</button><button data-n="3">3v3</button>
+        </div>
+        <div class="lbl">Carrocería</div>
+        <div id="hb-list"></div>
+        <div class="row col">
+          <button id="btn-bots" class="primary">Jugar contra bots</button>
+          <button id="btn-create">Crear sala online</button>
+          <div class="row">
+            <input id="in-code" maxlength="4" placeholder="CÓDIGO" autocomplete="off">
+            <button id="btn-join">Unirse</button>
+          </div>
+        </div>
+        <div id="menu-msg"></div>
+      </section>
+      <section>
+        <div class="lbl">Cámara</div>
+        <div id="settings"></div>
+        <div class="lbl">Controles</div>
+        <table id="controls">
+          <tr><td>W / S</td><td>Acelerar / frenar · morro abajo / arriba</td></tr>
+          <tr><td>A / D</td><td>Girar · guiñada</td></tr>
+          <tr><td>Q / E</td><td>Alabeo en el aire</td></tr>
+          <tr><td>Espacio / clic dcho.</td><td>Salto (doble pulsación: voltereta)</td></tr>
+          <tr><td>Mayús / clic izq.</td><td>Turbo</td></tr>
+          <tr><td>Ctrl / C</td><td>Derrape · giro libre</td></tr>
+          <tr><td>R</td><td>Cámara balón</td></tr>
+          <tr><td>H</td><td>Ver hitbox</td></tr>
+          <tr><td>Esc</td><td>Pausa</td></tr>
+          <tr><td>Mando</td><td>RT/LT, stick, A salto, B turbo, X derrape, Y cámara, LB/RB alabeo</td></tr>
+        </table>
+      </section>
+    </div>
+  </div>
+</div>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>
