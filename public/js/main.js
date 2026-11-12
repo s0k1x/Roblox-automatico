@@ -16,14 +16,20 @@ try {
 const input = createInput();
 
 // ---------- ajustes persistentes ----------
-const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', fov: 110, dist: 270, height: 110, angle: -3, stiff: 0.45, ballcamDefault: false };
+const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', fov: 110, dist: 270, height: 110, angle: -3, stiff: 0.45, ballcamDefault: false,
+  botLevel: 1, infBoost: false, quality: 'alta', showSpeed: true,
+  paint: { a: '#2fd6b5', b: '#14213d', w: '#d9e2f2', t: '#ffb347' },
+  stats: { matches: 0, wins: 0, goals: 0, saves: 0, shots: 0, demos: 0 } };
 let cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('balonturbo') || '{}')); } catch (e) { /* sin almacenamiento */ }
+cfg.paint = { ...DEFAULTS.paint, ...(cfg.paint || {}) };
+cfg.stats = { ...DEFAULTS.stats, ...(cfg.stats || {}) };
 function save() { try { localStorage.setItem('balonturbo', JSON.stringify(cfg)); } catch (e) { /* ignorar */ } }
 function applyCam() {
   renderer.setCameraSettings({ fov: cfg.fov, dist: cfg.dist, height: cfg.height, angle: cfg.angle, stiff: cfg.stiff });
 }
 applyCam();
+renderer.setQuality(cfg.quality);
 
 // ---------- menú ----------
 const SLIDERS = [
@@ -54,26 +60,198 @@ function buildSettings(box) {
 }
 buildSettings($('settings'));
 
-$('in-name').value = cfg.name;
+const playerName = () => (cfg.name.trim() || 'Piloto').slice(0, 16);
+const msg = (t) => { $('menu-msg').textContent = t || ''; };
+
+// Carrocerías (garaje)
 const hbList = $('hb-list');
 for (const h of HITBOXES) {
   const b = document.createElement('button');
+  b.type = 'button';
   b.dataset.id = h.id;
   b.innerHTML = `${h.name}<small>${Math.round(h.size[0])}×${Math.round(h.size[1])}×${Math.round(h.size[2])}</small>`;
   b.addEventListener('click', () => { cfg.hitbox = h.id; save(); markSel(); });
   hbList.appendChild(b);
 }
+
+// Pintura (garaje)
+const SWATCHES = ['#2fd6b5', '#e8f0ff', '#ff4d6d', '#ffd166', '#7b5cff', '#2f8cff', '#ff8a1f', '#9bff57', '#ff6fb5', '#14213d', '#5b6478', '#0b0d12'];
+const PAINT_ROWS = [['a', 'Color principal'], ['b', 'Color secundario'], ['w', 'Llantas'], ['t', 'Estela de turbo']];
+const paintBox = $('paint-rows');
+for (const [key, label] of PAINT_ROWS) {
+  const row = document.createElement('div');
+  row.className = 'prow'; row.dataset.key = key;
+  row.innerHTML = `<div class="lbl">${label}</div><div class="sws"></div>`;
+  const sws = row.querySelector('.sws');
+  for (const hex of SWATCHES) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sw'; b.dataset.hex = hex;
+    b.style.background = hex; b.setAttribute('aria-label', `${label}: ${hex}`);
+    b.addEventListener('click', () => { cfg.paint[key] = hex; save(); markSel(); });
+    sws.appendChild(b);
+  }
+  const inp = document.createElement('input');
+  inp.type = 'color'; inp.className = 'pick'; inp.setAttribute('aria-label', `${label}: elegir otro color`);
+  inp.addEventListener('input', () => { cfg.paint[key] = inp.value; save(); markSel(); });
+  sws.appendChild(inp);
+  paintBox.appendChild(row);
+}
+$('btn-paint-reset').addEventListener('click', () => { cfg.paint = { ...DEFAULTS.paint }; save(); markSel(); });
+
 function markSel() {
   for (const b of hbList.children) b.classList.toggle('on', b.dataset.id === cfg.hitbox);
-  for (const b of $('seg-mode').children) b.classList.toggle('on', +b.dataset.n === cfg.teamSize);
+  for (const seg of document.querySelectorAll('.seg[data-key]')) {
+    for (const b of seg.children) b.classList.toggle('on', String(cfg[seg.dataset.key]) === b.dataset.v);
+  }
+  for (const row of paintBox.children) {
+    const cur = (cfg.paint[row.dataset.key] || '').toLowerCase();
+    for (const b of row.querySelectorAll('.sw')) b.classList.toggle('on', b.dataset.hex === cur);
+    row.querySelector('.pick').value = cur;
+  }
 }
-for (const b of $('seg-mode').children) b.addEventListener('click', () => { cfg.teamSize = +b.dataset.n; save(); markSel(); });
+for (const seg of document.querySelectorAll('.seg[data-key]')) {
+  for (const b of seg.children) b.addEventListener('click', () => {
+    const k = seg.dataset.key;
+    cfg[k] = typeof DEFAULTS[k] === 'number' ? +b.dataset.v : b.dataset.v;
+    save(); markSel();
+    if (k === 'quality') renderer.setQuality(cfg.quality);
+  });
+}
 markSel();
+
+$('in-name').value = cfg.name;
 $('in-name').addEventListener('input', () => { cfg.name = $('in-name').value; save(); });
 $('in-code').addEventListener('input', () => { $('in-code').value = $('in-code').value.replace(/[^a-zA-Z]/g, '').toUpperCase(); });
+$('chk-boost').checked = !!cfg.infBoost;
+$('chk-boost').addEventListener('change', () => { cfg.infBoost = $('chk-boost').checked; save(); });
+$('chk-speed').checked = cfg.showSpeed !== false;
+$('chk-speed').addEventListener('change', () => { cfg.showSpeed = $('chk-speed').checked; save(); $('speed').classList.toggle('hidden', !cfg.showSpeed); });
 
-const playerName = () => ($('in-name').value.trim() || 'Piloto').slice(0, 16);
-const msg = (t) => { $('menu-msg').textContent = t || ''; };
+// Pestañas de ajustes
+function setSettingsTab(t) {
+  for (const b of $('set-tabs').children) { const on = b.dataset.stab === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }
+  for (const id of ['cam', 'ctl', 'gfx', 'ui']) $('st-' + id).classList.toggle('hidden', id !== t);
+}
+for (const b of $('set-tabs').children) b.addEventListener('click', () => setSettingsTab(b.dataset.stab));
+setSettingsTab('cam');
+
+// Perfil
+const STAT_LABELS = [['matches', 'Partidos'], ['wins', 'Victorias'], ['goals', 'Goles'], ['saves', 'Paradas'], ['shots', 'Tiros'], ['demos', 'Demoliciones']];
+function renderStats() {
+  const box = $('stats');
+  box.innerHTML = '';
+  for (const [k, label] of STAT_LABELS) {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = `<b>${cfg.stats[k] | 0}</b><span>${label}</span>`;
+    box.appendChild(d);
+  }
+}
+$('btn-stats-reset').addEventListener('click', () => { cfg.stats = { ...DEFAULTS.stats }; save(); renderStats(); });
+renderStats();
+
+// ---------- navegación del menú (ratón, teclado y mando) ----------
+const VIEW_TITLES = { home: '', play: 'Jugar', online: 'Online', bots: 'Contra bots', train: 'Entrenamiento libre', garage: 'Garaje', settings: 'Ajustes', profile: 'Perfil' };
+const VIEW_PARENT = { play: 'home', online: 'play', bots: 'play', train: 'home', garage: 'home', settings: 'home', profile: 'home' };
+let view = 'home';
+const menuEl = $('menu');
+function focusables() {
+  return [...menuEl.querySelectorAll('button, input')].filter((el) => !el.disabled && el.getClientRects().length > 0);
+}
+function focusFirst() {
+  const v = $('v-' + view);
+  const el = v.querySelector('[data-focus]') || v.querySelector('button, input[type=range], input[type=checkbox]') || $('btn-back');
+  if (el && el.getClientRects().length) el.focus({ preventScroll: true });
+}
+function go(v, keepFocus) {
+  view = v;
+  for (const el of menuEl.querySelectorAll('.view')) el.classList.toggle('hidden', el.id !== 'v-' + v);
+  $('view-title').textContent = VIEW_TITLES[v] || '';
+  $('btn-back').classList.toggle('hidden', v === 'home');
+  menuEl.classList.toggle('in-garage', v === 'garage');
+  if (v === 'profile') renderStats();
+  if (!keepFocus) focusFirst();
+}
+function back() { if (view !== 'home') { msg(''); go(VIEW_PARENT[view] || 'home'); } }
+$('btn-back').addEventListener('click', back);
+for (const b of menuEl.querySelectorAll('[data-go]')) b.addEventListener('click', () => { msg(''); go(b.dataset.go); });
+
+// Navegación espacial con flechas / cruceta
+function moveFocus(dir) {
+  const list = focusables();
+  let cur = document.activeElement;
+  if (!cur || !menuEl.contains(cur) || !list.includes(cur)) { focusFirst(); return; }
+  const r0 = cur.getBoundingClientRect();
+  const cx = r0.left + r0.width / 2, cy = r0.top + r0.height / 2;
+  let best = null, bestScore = Infinity;
+  for (const el of list) {
+    if (el === cur) continue;
+    const r = el.getBoundingClientRect();
+    const dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+    const horiz = dir === 'left' || dir === 'right';
+    const main = horiz ? (dir === 'right' ? dx : -dx) : (dir === 'down' ? dy : -dy);
+    if (main < 3) continue;
+    const perp = Math.abs(horiz ? dy : dx);
+    const sc = main + perp * 3;
+    if (sc < bestScore) { bestScore = sc; best = el; }
+  }
+  if (best) best.focus();
+}
+function fireDir(dir) {
+  const el = document.activeElement;
+  if (el && el.type === 'range' && (dir === 'left' || dir === 'right')) {
+    const step = parseFloat(el.step) || 1;
+    el.value = String(parseFloat(el.value) + (dir === 'right' ? step : -step));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+  moveFocus(dir);
+}
+const ARROWS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+window.addEventListener('keydown', (e) => {
+  if (mode !== 'menu') return;
+  document.body.classList.remove('usepad');
+  if (e.code === 'Escape') { e.preventDefault(); back(); return; }
+  const dir = ARROWS[e.code];
+  if (!dir) return;
+  const t = e.target;
+  const horiz = dir === 'left' || dir === 'right';
+  if (t && t.type === 'range' && horiz) return;
+  if (t && t.tagName === 'INPUT' && (t.type === 'text' || !t.type) && horiz) return;
+  e.preventDefault();
+  moveFocus(dir);
+});
+window.addEventListener('mousemove', () => document.body.classList.remove('usepad'));
+
+// Mando en el menú
+const padSt = { up: { on: false, t: 0 }, down: { on: false, t: 0 }, left: { on: false, t: 0 }, right: { on: false, t: 0 }, a: true, b: true };
+function firstPad() {
+  try { for (const p of (navigator.getGamepads ? navigator.getGamepads() : [])) if (p && p.connected) return p; } catch (e) { /* sin mando */ }
+  return null;
+}
+function resetPadMenu() { padSt.a = padSt.b = true; for (const k of ['up', 'down', 'left', 'right']) padSt[k].on = false; }
+function pollMenuPad(now) {
+  const p = firstPad();
+  if (!p) return;
+  const btn = (i) => !!(p.buttons[i] && p.buttons[i].pressed);
+  const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
+  const want = { up: ay < -0.6 || btn(12), down: ay > 0.6 || btn(13), left: ax < -0.6 || btn(14), right: ax > 0.6 || btn(15) };
+  for (const k of ['up', 'down', 'left', 'right']) {
+    const st = padSt[k];
+    if (want[k]) {
+      if (!st.on) { st.on = true; st.t = now + 380; document.body.classList.add('usepad'); fireDir(k); }
+      else if (now >= st.t) { st.t = now + 120; fireDir(k); }
+    } else st.on = false;
+  }
+  const a = btn(0), b = btn(1);
+  if (a && !padSt.a) {
+    document.body.classList.add('usepad');
+    const el = document.activeElement;
+    if (el && menuEl.contains(el) && el.tagName !== 'BODY') el.click(); else focusFirst();
+  }
+  if (b && !padSt.b) { document.body.classList.add('usepad'); back(); }
+  padSt.a = a; padSt.b = b;
+}
 
 // ---------- estado de la aplicación ----------
 let mode = 'menu'; // menu | local | host | online
@@ -98,8 +276,15 @@ let showHit = false;
 
 function show(id, v) { $(id).classList.toggle('hidden', !v); }
 
+let training = false;
+let trainGoals = 0;
 function enterGame(m) {
   mode = m; paused = false;
+  training = !!(game && game.freePlay);
+  trainGoals = 0; $('train-goals').textContent = '0';
+  $('scoreboard').classList.toggle('hidden', training);
+  show('train-info', training);
+  $('speed').classList.toggle('hidden', cfg.showSpeed === false);
   show('menu', false); show('hud', true); show('pause', false); show('endscreen', false);
   show('room-code', m === 'online' || m === 'host'); show('conn', false);
   ballCam = !!cfg.ballcamDefault;
@@ -117,12 +302,20 @@ function toMenu(message) {
   mode = 'menu'; game = null; latest = null; snaps = []; paused = false;
   show('menu', true); show('hud', false); show('pause', false); show('endscreen', false);
   msg(message);
+  resetPadMenu();
+  go(message ? 'play' : 'home');
 }
 
 function startLocal() {
-  cfg.name = $('in-name').value; save();
-  game = new Game({ teamSize: cfg.teamSize });
-  game.setHuman(0, playerName(), cfg.hitbox);
+  game = new Game({ teamSize: cfg.teamSize, botLevel: cfg.botLevel });
+  game.setHuman(0, playerName(), cfg.hitbox, cfg.paint);
+  myCarId = 0; acc = 0; pendingEvents = [];
+  enterGame('local');
+}
+
+function startTraining() {
+  game = new Game({ freePlay: true, infiniteBoost: !!cfg.infBoost });
+  game.setHuman(0, playerName(), cfg.hitbox, cfg.paint);
   myCarId = 0; acc = 0; pendingEvents = [];
   enterGame('local');
 }
@@ -140,10 +333,9 @@ function pickCar() {
 }
 
 async function startHost() {
-  cfg.name = $('in-name').value; save();
   msg('Creando sala…');
   game = new Game({ teamSize: cfg.teamSize });
-  game.setHuman(0, playerName(), cfg.hitbox);
+  game.setHuman(0, playerName(), cfg.hitbox, cfg.paint);
   myCarId = 0; acc = 0; pendingEvents = []; netEvents = []; tickCount = 0; hostHumans.clear();
   try {
     host = await hostRoom({
@@ -152,7 +344,7 @@ async function startHost() {
         const carId = pickCar();
         if (carId < 0) return { type: 'error', message: 'La sala está llena.' };
         const hb = typeof m.hitbox === 'string' ? m.hitbox : 'estandar';
-        game.setHuman(carId, String(m.name || 'Jugador').slice(0, 16), hb);
+        game.setHuman(carId, String(m.name || 'Jugador').slice(0, 16), hb, m.paint);
         hostHumans.set(peerId, carId);
         banner(`${game.cars[carId].name} se ha unido`, '', '#39f3c8', 2, 0);
         return { type: 'welcome', room: host ? host.code : '', carId, teamSize: game.teamSize };
@@ -188,12 +380,11 @@ async function startHost() {
 
 // ---------- Invitado ----------
 async function startOnline(code) {
-  cfg.name = $('in-name').value; save();
   msg('Conectando con el anfitrión…');
   snaps = []; latest = null; roomCode = '';
   let conn;
   try {
-    conn = await joinRoom(code, { type: 'join', name: playerName(), hitbox: cfg.hitbox }, {
+    conn = await joinRoom(code, { type: 'join', name: playerName(), hitbox: cfg.hitbox, paint: cfg.paint }, {
       onMessage(m) {
         if (m.type === 'welcome') {
           myCarId = m.carId; roomCode = m.room;
@@ -219,6 +410,7 @@ async function startOnline(code) {
 }
 
 $('btn-bots').addEventListener('click', startLocal);
+$('btn-train').addEventListener('click', startTraining);
 $('btn-create').addEventListener('click', () => startHost());
 $('btn-join').addEventListener('click', () => {
   const code = $('in-code').value.trim().toUpperCase();
@@ -245,8 +437,15 @@ function setPause(v) {
   show('pause', v);
   if (!v) { const b = $('settings2'); if (b) b.remove(); input.reset(); }
 }
+function trainBall(inFront) {
+  if (mode === 'local' && game && game.freePlay && !paused) game.resetBall(inFront);
+}
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && mode !== 'menu') { e.preventDefault(); setPause(!paused); }
+  if (!e.repeat && mode !== 'menu' && !(e.target && e.target.tagName === 'INPUT')) {
+    if (e.code === 'KeyT') trainBall(true);
+    else if (e.code === 'KeyG') trainBall(false);
+  }
   if (e.code === 'Enter' && mode === 'menu' && e.target && e.target.id === 'in-code') $('btn-join').click();
 });
 
@@ -263,7 +462,10 @@ function banner(text, sub, color, secs, prio) {
 function carName(s, id) { const c = s.cars.find((x) => x.id === id); return c ? c.name : ''; }
 function handleHudEvents(events, s) {
   for (const e of events) {
-    if (e.type === 'goal') {
+    if (e.type === 'goal' && training) {
+      trainGoals++; $('train-goals').textContent = String(trainGoals);
+      banner('¡GOL!', `${e.speed} km/h`, TEAM_COLORS[0], 2, 3);
+    } else if (e.type === 'goal') {
       const who = e.scorer !== null && e.scorer !== undefined ? carName(s, e.scorer) : '';
       banner('¡GOL!', `${who ? who + ' · ' : ''}${e.own ? 'en propia puerta · ' : ''}${e.speed} km/h`, TEAM_COLORS[e.team], 3, 3);
     } else if (e.type === 'demo') {
@@ -299,7 +501,17 @@ function updateHud(s, dt) {
   if (s.phase === 'ended' && !hudState.ended) { hudState.ended = true; showEnd(s); }
   else if (s.phase !== 'ended' && hudState.ended) { hudState.ended = false; show('endscreen', false); }
 }
+function addStats(s) {
+  const me = s.cars.find((c) => c.id === myCarId);
+  if (!me) return;
+  const st = cfg.stats;
+  st.matches++;
+  if (s.score[me.team] > s.score[1 - me.team]) st.wins++;
+  st.goals += me.st[0]; st.saves += me.st[1]; st.shots += me.st[2]; st.demos += me.st[3];
+  save();
+}
 function showEnd(s) {
+  if (!s.freePlay) addStats(s);
   const [a, b] = s.score;
   $('end-title').textContent = a === b ? 'Empate' : `Gana ${TEAM_NAMES[a > b ? 0 : 1]}`;
   $('end-score').innerHTML = `<span class="b">${a}</span> – <span class="o">${b}</span>`;
@@ -349,12 +561,23 @@ function interpolated(dt) {
 
 // ---------- bucle ----------
 let last = performance.now();
+let selPrev = false;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
-  if (mode === 'menu') { renderer.render(null, null, dt); return; }
+  if (mode === 'menu') {
+    pollMenuPad(now);
+    renderer.renderMenu(dt, { hb: cfg.hitbox, paint: cfg.paint, team: 0, view: view === 'garage' ? 'garage' : 'menu' });
+    return;
+  }
+
+  // Entrenamiento: botón Select/View del mando = balón delante del coche
+  const gp = firstPad();
+  const sel = !!(gp && gp.buttons[8] && gp.buttons[8].pressed);
+  if (sel && !selPrev) trainBall(true);
+  selPrev = sel;
 
   if (input.ballCamToggled() && !paused) { ballCam = !ballCam; renderer.setBallCam(ballCam); show('ballcam-ind', ballCam); }
   if (input.hitboxToggled() && !paused) { showHit = !showHit; renderer.setShowHitbox(showHit); }

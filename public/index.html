@@ -40,6 +40,7 @@
     <span id="sc-orange" class="score orange">0</span>
   </div>
   <div id="room-code" class="hidden"></div>
+  <div id="train-info" class="hidden"><b>Entrenamiento</b> · Goles <span id="train-goals">0</span><small><kbd>T</kbd> balón delante · <kbd>G</kbd> balón al centro</small></div>
   <div id="ballcam-ind" class="hidden">Cámara balón</div>
   <div id="countdown"></div>
   <div id="banner"></div>
@@ -76,46 +77,112 @@
 </div>
 
 <div id="menu" class="overlay">
-  <div class="panel">
-    <h1>BALÓN <span>TURBO</span></h1>
-    <p class="tag">Fútbol con coches. Sin descanso, sin frenos.</p>
-    <div class="grid">
-      <section>
-        <label>Tu nombre<input id="in-name" maxlength="16" placeholder="Piloto" autocomplete="off"></label>
-        <div class="lbl">Modo</div>
-        <div class="seg" id="seg-mode">
-          <button data-n="1" class="on">1v1</button><button data-n="2">2v2</button><button data-n="3">3v3</button>
+  <div class="shell">
+    <header class="brand">
+      <h1 class="logo" aria-label="Balón Turbo">
+        <svg class="mark" viewBox="0 0 48 48" width="46" height="46" aria-hidden="true"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><path d="M27 6 15 27h9l-3 15 13-23h-9z" fill="currentColor"/></svg>
+        <span class="l1">BALÓN</span><span class="l2">TURBO</span>
+      </h1>
+      <p class="tag">Fútbol con coches. Sin descanso, sin frenos.</p>
+    </header>
+
+    <div class="stage">
+      <div class="stage-head">
+        <button id="btn-back" class="back hidden" type="button">&larr; Volver</button>
+        <h2 id="view-title"></h2>
+      </div>
+
+      <section class="view" id="v-home" aria-label="Menú principal">
+        <div class="cards">
+          <button class="card c1" type="button" data-go="play"><b>Jugar</b><span>Partidas online o contra bots</span></button>
+          <button class="card c2" type="button" data-go="train"><b>Entrenamiento</b><span>Balón libre, sin reloj ni rivales</span></button>
+          <button class="card c3" type="button" data-go="garage"><b>Garaje</b><span>Carrocería, colores y estela</span></button>
+          <button class="card c4" type="button" data-go="settings"><b>Ajustes</b><span>Cámara, controles y gráficos</span></button>
+          <button class="card c5" type="button" data-go="profile"><b>Perfil</b><span>Tu nombre y tus estadísticas</span></button>
         </div>
-        <div class="lbl">Carrocería</div>
-        <div id="hb-list"></div>
-        <div class="row col">
-          <button id="btn-bots" class="primary">Jugar contra bots</button>
-          <button id="btn-create">Crear sala online</button>
-          <div class="row">
-            <input id="in-code" maxlength="4" placeholder="CÓDIGO" autocomplete="off">
-            <button id="btn-join">Unirse</button>
-          </div>
-        </div>
-        <div id="menu-msg"></div>
       </section>
-      <section>
-        <div class="lbl">Cámara</div>
-        <div id="settings"></div>
-        <div class="lbl">Controles</div>
-        <table id="controls">
-          <tr><td>W / S</td><td>Acelerar / frenar · morro abajo / arriba</td></tr>
-          <tr><td>A / D</td><td>Girar · guiñada</td></tr>
-          <tr><td>Q / E</td><td>Alabeo en el aire</td></tr>
-          <tr><td>Espacio / clic dcho.</td><td>Salto (doble pulsación: voltereta)</td></tr>
-          <tr><td>Mayús / clic izq.</td><td>Turbo</td></tr>
-          <tr><td>Ctrl / C</td><td>Derrape · giro libre</td></tr>
-          <tr><td>R</td><td>Cámara balón</td></tr>
-          <tr><td>H</td><td>Ver hitbox</td></tr>
-          <tr><td>Esc</td><td>Pausa</td></tr>
-          <tr><td>Mando</td><td>RT/LT, stick, A salto, B turbo, X derrape, Y cámara, LB/RB alabeo</td></tr>
-        </table>
+
+      <section class="view hidden" id="v-play" aria-label="Jugar">
+        <div class="cards two">
+          <button class="card c1" type="button" data-go="online"><b>Online</b><span>Crea una sala o únete con un código</span></button>
+          <button class="card c2" type="button" data-go="bots"><b>Contra bots</b><span>Elige formato y dificultad</span></button>
+        </div>
+      </section>
+
+      <section class="view hidden" id="v-online" aria-label="Online">
+        <div class="lbl">Formato</div>
+        <div class="seg" data-key="teamSize"><button type="button" data-v="1">1v1</button><button type="button" data-v="2">2v2</button><button type="button" data-v="3">3v3</button></div>
+        <div class="row"><button id="btn-create" class="primary big" type="button">Crear sala</button></div>
+        <div class="lbl">Unirse con código</div>
+        <div class="row code">
+          <input id="in-code" maxlength="4" placeholder="CÓDIGO" autocomplete="off" aria-label="Código de sala (4 letras)">
+          <button id="btn-join" type="button">Unirse</button>
+        </div>
+        <p class="note">Quien crea la sala debe dejar la pestaña abierta. Pásale el código a tus amigos.</p>
+      </section>
+
+      <section class="view hidden" id="v-bots" aria-label="Contra bots">
+        <div class="lbl">Formato</div>
+        <div class="seg" data-key="teamSize"><button type="button" data-v="1">1v1</button><button type="button" data-v="2">2v2</button><button type="button" data-v="3">3v3</button></div>
+        <div class="lbl">Dificultad</div>
+        <div class="seg" data-key="botLevel"><button type="button" data-v="0">Novato</button><button type="button" data-v="1">Profesional</button><button type="button" data-v="2">Experto</button></div>
+        <div class="row"><button id="btn-bots" class="primary big" type="button">Empezar partido</button></div>
+      </section>
+
+      <section class="view hidden" id="v-train" aria-label="Entrenamiento libre">
+        <p class="note first">Tú solo con el balón: sin cuenta atrás, sin reloj y sin rivales. Durante la práctica, T pone el balón delante de tu coche y G lo lleva al centro.</p>
+        <label class="chk"><input type="checkbox" id="chk-boost"> Turbo infinito</label>
+        <div class="row"><button id="btn-train" class="primary big" type="button">Empezar entrenamiento</button></div>
+      </section>
+
+      <section class="view hidden" id="v-garage" aria-label="Garaje">
+        <div class="lbl">Carrocería <small>(largo × ancho × alto, en uu)</small></div>
+        <div id="hb-list"></div>
+        <div id="paint-rows"></div>
+        <p class="note">Se añade siempre una franja con el color de tu equipo para que te reconozcan.</p>
+        <div class="row"><button id="btn-paint-reset" type="button">Restablecer colores</button></div>
+      </section>
+
+      <section class="view hidden" id="v-settings" aria-label="Ajustes">
+        <div class="seg tabs" id="set-tabs" role="tablist">
+          <button type="button" role="tab" data-stab="cam">Cámara</button><button type="button" role="tab" data-stab="ctl">Controles</button><button type="button" role="tab" data-stab="gfx">Gráficos</button><button type="button" role="tab" data-stab="ui">Interfaz</button>
+        </div>
+        <div class="spanel" id="st-cam"><div id="settings"></div></div>
+        <div class="spanel hidden" id="st-ctl">
+          <table id="controls">
+            <tr><td>W / S</td><td>Acelerar / frenar · morro abajo / arriba</td></tr>
+            <tr><td>A / D</td><td>Girar · guiñada</td></tr>
+            <tr><td>Q / E</td><td>Alabeo en el aire</td></tr>
+            <tr><td>Espacio / clic dcho.</td><td>Salto (doble pulsación: voltereta)</td></tr>
+            <tr><td>Mayús / clic izq.</td><td>Turbo</td></tr>
+            <tr><td>Ctrl / C</td><td>Derrape · giro libre</td></tr>
+            <tr><td>R</td><td>Cámara balón</td></tr>
+            <tr><td>H</td><td>Ver hitbox</td></tr>
+            <tr><td>T / G</td><td>Entrenamiento: balón delante / al centro</td></tr>
+            <tr><td>Esc</td><td>Pausa</td></tr>
+            <tr><td>Mando</td><td>RT/LT, stick, A salto, B turbo, X derrape, Y cámara, LB/RB alabeo, Select balón delante (entrenamiento)</td></tr>
+          </table>
+        </div>
+        <div class="spanel hidden" id="st-gfx">
+          <div class="lbl">Calidad</div>
+          <div class="seg" data-key="quality"><button type="button" data-v="alta">Alta</button><button type="button" data-v="baja">Baja</button></div>
+          <p class="note">Baja ajusta la imagen a la resolución normal y reduce las partículas: ideal para equipos modestos.</p>
+        </div>
+        <div class="spanel hidden" id="st-ui">
+          <label class="chk"><input type="checkbox" id="chk-speed"> Mostrar velocidad en pantalla</label>
+        </div>
+      </section>
+
+      <section class="view hidden" id="v-profile" aria-label="Perfil">
+        <label class="field">Nombre del piloto<input id="in-name" maxlength="16" placeholder="Piloto" autocomplete="off"></label>
+        <div class="lbl">Estadísticas</div>
+        <div id="stats"></div>
+        <div class="row"><button id="btn-stats-reset" type="button">Borrar estadísticas</button></div>
       </section>
     </div>
+
+    <div id="menu-msg" role="status" aria-live="polite"></div>
+    <footer class="hints">Flechas moverse · Intro elegir · Esc volver · Mando: cruceta o stick, A elegir, B volver</footer>
   </div>
 </div>
 <script src="./vendor/peerjs.min.js"></script>

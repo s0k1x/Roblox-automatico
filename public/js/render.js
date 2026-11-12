@@ -288,20 +288,45 @@ const wheelGeo = new THREE.CylinderGeometry(17, 17, 14, 14);
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const hitEdges = new THREE.EdgesGeometry(boxGeo);
 const matCache = {};
-function carMats(team) {
-  if (matCache[team]) return matCache[team];
-  const col = new THREE.Color(teamHex(team));
-  return (matCache[team] = {
-    paint: new THREE.MeshPhongMaterial({ color: col, shininess: 70, specular: 0x88aacc, flatShading: true }),
-    dark: new THREE.MeshPhongMaterial({ color: new THREE.Color(teamHex(team)).multiplyScalar(0.22), shininess: 100, specular: 0xaaccff, flatShading: true }),
-    wing: new THREE.MeshPhongMaterial({ color: new THREE.Color(teamHex(team)).multiplyScalar(0.55), flatShading: true }),
+const HEXRE = /^#[0-9a-fA-F]{6}$/;
+function hexOr(v, fallback) { return typeof v === 'string' && HEXRE.test(v) ? v : fallback; }
+// Colores efectivos de un coche: la pintura elegida o, si no hay, los del equipo.
+function resolvePaint(team, paint) {
+  const th = teamHex(team);
+  const a = hexOr(paint && paint.a, th);
+  return {
+    a,
+    b: hexOr(paint && paint.b, '#' + new THREE.Color(th).multiplyScalar(0.55).getHexString()),
+    w: hexOr(paint && paint.w, '#8d97ab'),
+    t: hexOr(paint && paint.t, '#ff8a1f'),
+    custom: !!paint,
+  };
+}
+function carMats(team, paint) {
+  const pc = resolvePaint(team, paint);
+  const key = team + '|' + pc.a + pc.b + pc.w + pc.t;
+  if (matCache[key]) return matCache[key];
+  const bCol = new THREE.Color(pc.b);
+  return (matCache[key] = {
+    paint: new THREE.MeshPhongMaterial({ color: new THREE.Color(pc.a), shininess: 70, specular: 0x88aacc, flatShading: true }),
+    dark: new THREE.MeshPhongMaterial({ color: pc.custom ? bCol.clone().multiplyScalar(0.3) : new THREE.Color(pc.a).multiplyScalar(0.22), shininess: 100, specular: 0xaaccff, flatShading: true }),
+    wing: new THREE.MeshPhongMaterial({ color: bCol, flatShading: true }),
+    rim: new THREE.MeshPhongMaterial({ color: new THREE.Color(pc.w), shininess: 90, specular: 0xffffff, flatShading: true }),
+    team: new THREE.MeshBasicMaterial({ color: new THREE.Color(teamHex(team)) }),
   });
+}
+// Color de la estela de turbo [frío, caliente] en rgb 0..1.
+function trailColors(team, paint) {
+  const c = new THREE.Color(resolvePaint(team, paint).t);
+  const h = c.clone().lerp(new THREE.Color(1, 1, 1), 0.5);
+  return [[c.r, c.g, c.b], [h.r, h.g, h.b]];
 }
 const tireMat = new THREE.MeshLambertMaterial({ color: 0x14161c });
 const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff2c0 });
+const rimGeo = new THREE.CylinderGeometry(10, 10, 18, 10);
 
-function buildCar(hb, team) {
-  const m = carMats(team);
+function buildCar(hb, team, paint) {
+  const m = carMats(team, paint);
   const grp = new THREE.Group();
   grp.matrixAutoUpdate = false;
   const [sx, sy, sz] = hb.size;
@@ -329,10 +354,25 @@ function buildCar(hb, team) {
     l.scale.set(0.03, 0.18, 0.08); l.position.set(0.5, y, -0.12);
     box.add(l);
   }
+  // detalles: franja lateral con el color secundario y luces bajas con el color del equipo
+  for (const y of [-1, 1]) {
+    const stripe = new THREE.Mesh(boxGeo, m.wing);
+    stripe.scale.set(0.8, 0.012, 0.07); stripe.position.set(-0.02, y * 0.503, -0.17);
+    box.add(stripe);
+    const glow = new THREE.Mesh(boxGeo, m.team);
+    glow.scale.set(0.74, 0.02, 0.05); glow.position.set(-0.02, y * 0.505, -0.42);
+    box.add(glow);
+  }
+  const tail = new THREE.Mesh(boxGeo, m.team);
+  tail.scale.set(0.02, 0.7, 0.06); tail.position.set(-0.503, 0, -0.3);
+  box.add(tail);
   for (const wx of [0.3, -0.3]) for (const wy of [-1, 1]) {
     const w = new THREE.Mesh(wheelGeo, tireMat);
     w.position.set(ox + sx * wx, wy * (sy / 2 - 6), 0);
     grp.add(w);
+    const r = new THREE.Mesh(rimGeo, m.rim);
+    r.position.copy(w.position);
+    grp.add(r);
   }
   const wire = new THREE.LineSegments(hitEdges, new THREE.LineBasicMaterial({ color: 0x39f3c8, depthTest: false }));
   wire.scale.set(sx, sy, sz); wire.position.set(ox, oy, oz);
@@ -406,6 +446,15 @@ export function createRenderer(canvas) {
   const shadowGeo = new THREE.CircleGeometry(60, 18);
 
   const cars = new Map();
+  let quality = 'alta';
+  let qf = 1; // factor de partículas
+  let showcase = null; // coche de vitrina del menú
+  let lastPreview = null;
+  let menuFov = false;
+  let showAng = 0.6;
+  const showShadow = new THREE.Mesh(shadowGeo, shadowMat.clone());
+  showShadow.material.opacity = 0.45; showShadow.visible = false; showShadow.position.z = 1.2;
+  scene.add(showShadow);
   let camSettings = { ...DEFAULT_CAM };
   let ballCam = false;
   let showHitbox = false;
@@ -443,6 +492,7 @@ export function createRenderer(canvas) {
 
   const rnd = () => Math.random() * 2 - 1;
   function burst(p, n, colors, vmin, vmax, lmin, lmax, smin, smax) {
+    n = Math.max(1, Math.round(n * qf));
     for (let i = 0; i < n; i++) {
       tv.set(rnd(), rnd(), rnd()).normalize();
       const v = vmin + Math.random() * (vmax - vmin);
@@ -500,11 +550,78 @@ export function createRenderer(canvas) {
     camera.lookAt(tv.x + tv2.x * 1000, tv.y + tv2.y * 1000, tv.z + tv2.z * 1000);
   }
 
-  function menuCamera(dt) {
-    cam.orbit += dt * 0.12;
-    const r = 5200, a = cam.orbit;
-    camera.position.set(Math.sin(a) * r * 0.55, -Math.cos(a) * r, 1900);
-    camera.lookAt(0, 0, 250);
+  function setMenuFov() {
+    camera.fov = 48; camera.updateProjectionMatrix();
+    const bh = renderer.getDrawingBufferSize(new THREE.Vector2()).y;
+    particles.mat.uniforms.uScale.value = bh / (2 * Math.tan(camera.fov * D2R / 2));
+    menuFov = true;
+  }
+
+  function ensureShowcase(pv) {
+    const hb = HITBOXES.find((h) => h.id === pv.hb) || HITBOXES[0];
+    const p = pv.paint || null;
+    const team = pv.team || 0;
+    const key = hb.id + '|' + team + '|' + (p ? [p.a, p.b, p.w, p.t].join() : '');
+    if (showcase && showcase.key === key) return;
+    if (showcase) scene.remove(showcase.grp);
+    const grp = buildCar(hb, team, p);
+    scene.add(grp);
+    showcase = { key, grp, hb, team, paint: p, acc: 0 };
+  }
+
+  // Menú: cámara orbitando despacio el estadio con el coche del jugador girando en vitrina.
+  function renderMenuFrame(dt, pv) {
+    resize();
+    if (!pv) pv = { hb: 'estandar', paint: null, team: 0 };
+    lastPreview = pv;
+    ensureShowcase(pv);
+    setMenuFov();
+    const garage = pv.view === 'garage';
+    showAng += dt * (garage ? 0.55 : 0.32);
+    cam.orbit += dt * 0.07;
+    const C = [0, -700, 17];
+    const r = garage ? 300 : 360;
+    const a = cam.orbit + 0.9;
+    const h = garage ? 95 : 120;
+    camera.position.set(C[0] + Math.sin(a) * r, C[1] - Math.cos(a) * r, C[2] + h);
+    // desplazar el punto de mira para que el coche quede a la derecha (o arriba en vertical)
+    const dx = C[0] - camera.position.x, dy = C[1] - camera.position.y;
+    const dl = Math.hypot(dx, dy) || 1;
+    const rx = dy / dl, ry = -dx / dl;
+    const vh = r * Math.tan(camera.fov * D2R / 2);
+    const aspect = camera.aspect;
+    let tx = C[0], ty = C[1], tz = C[2] + 12;
+    if (aspect >= 1) { const sh = vh * aspect * 0.42; tx -= rx * sh; ty -= ry * sh; }
+    else { tz -= vh * 0.5; }
+    camera.lookAt(tx, ty, tz);
+
+    const g = showcase.grp;
+    const f = [Math.cos(showAng), Math.sin(showAng), 0];
+    setBasis(g, f, [0, 0, 1], C);
+    g.getObjectByName('wire').visible = false;
+    g.visible = true;
+    showShadow.visible = true;
+    showShadow.position.set(C[0] + f[0] * showcase.hb.off[0], C[1] + f[1] * showcase.hb.off[0], 1.2);
+    showShadow.scale.set(showcase.hb.size[0] / 100, showcase.hb.size[1] / 80, 1);
+    showShadow.rotation.z = showAng;
+    ball.matrix.makeTranslation(0, 0, BALL_R + 2); ball.matrixWorldNeedsUpdate = true;
+    ballShadow.position.set(0, 0, 1.5);
+    for (const c of cars.values()) c.grp.visible = c.label.visible = c.shadow.visible = false;
+    for (const p of pads) p.obj.visible = true;
+    if (garage) { // estela de turbo de muestra
+      const tc = trailColors(showcase.team, showcase.paint);
+      showcase.acc = Math.min(6, showcase.acc + dt * 55 * qf);
+      while (showcase.acc >= 1) {
+        showcase.acc -= 1;
+        const back = showcase.hb.off[0] - showcase.hb.size[0] / 2 - 4 - Math.random() * 12;
+        const q = [C[0] + f[0] * back, C[1] + f[1] * back, C[2] + showcase.hb.off[2] - 6];
+        const hot = Math.random() < 0.4;
+        const c = tc[hot ? 1 : 0];
+        particles.emit(q, [-f[0] * 260 + rnd() * 50, -f[1] * 260 + rnd() * 50, rnd() * 50], 0.4 + Math.random() * 0.2, hot ? 20 : 28, c[0], c[1], c[2]);
+      }
+    }
+    particles.update(dt);
+    renderer.render(scene, camera);
   }
 
   return {
@@ -512,6 +629,15 @@ export function createRenderer(canvas) {
     setCameraSettings(o) { camSettings = { ...camSettings, ...o }; size = { w: 0, h: 0 }; },
     setBallCam(v) { ballCam = !!v; },
     setShowHitbox(v) { showHitbox = !!v; },
+    setQuality(q) {
+      quality = q === 'baja' ? 'baja' : 'alta';
+      qf = quality === 'baja' ? 0.4 : 1;
+      renderer.setPixelRatio(quality === 'baja' ? 1 : Math.min(window.devicePixelRatio || 1, 2));
+      size = { w: 0, h: 0 };
+    },
+    renderMenu(dtFrame, carPreview) {
+      renderMenuFrame(Math.min(0.1, Math.max(0.0001, dtFrame || 0.016)), carPreview);
+    },
     handleEvents(events, state) {
       if (!events) return;
       for (const e of events) {
@@ -528,16 +654,10 @@ export function createRenderer(canvas) {
     render(state, myCarId, dtFrame) {
       const dt = Math.min(0.1, Math.max(0.0001, dtFrame || 0.016));
       resize();
-      if (!state) {
-        ball.matrix.makeTranslation(0, 0, BALL_R + 2); ball.matrixWorldNeedsUpdate = true;
-        ballShadow.position.set(0, 0, 1.5);
-        for (const c of cars.values()) c.grp.visible = c.label.visible = c.shadow.visible = false;
-        for (const p of pads) p.obj.visible = true;
-        menuCamera(dt);
-        particles.update(dt);
-        renderer.render(scene, camera);
-        return;
-      }
+      if (!state) { renderMenuFrame(dt, lastPreview); return; }
+      if (menuFov) { menuFov = false; updateFov(); }
+      if (showcase) showcase.grp.visible = false;
+      showShadow.visible = false;
       // balón
       setBasis(ball, state.ball.f, state.ball.u, state.ball.p);
       const bz = state.ball.p[2];
@@ -560,17 +680,18 @@ export function createRenderer(canvas) {
         if (c.id === myCarId) me = c;
         seen.add(c.id);
         let o = cars.get(c.id);
-        if (!o || o.hb !== c.hb || o.team !== c.team) {
+        const pkey = c.paint ? [c.paint.a, c.paint.b, c.paint.w, c.paint.t].join() : '';
+        if (!o || o.hb !== c.hb || o.team !== c.team || o.pkey !== pkey) {
           if (o) { scene.remove(o.grp, o.label, o.shadow); }
           const hb = HITBOXES.find((h) => h.id === c.hb) || HITBOXES[0];
-          const grp = buildCar(hb, c.team);
+          const grp = buildCar(hb, c.team, c.paint);
           scene.add(grp);
           const label = nameSprite(c.name, c.team);
           scene.add(label);
           const shadow = new THREE.Mesh(shadowGeo, shadowMat.clone());
           shadow.material.opacity = 0.35;
           scene.add(shadow);
-          o = { grp, label, shadow, hb: c.hb, team: c.team, name: c.name, hbObj: hb, acc: 0, acc2: 0 };
+          o = { grp, label, shadow, hb: c.hb, team: c.team, pkey, tcol: trailColors(c.team, c.paint), name: c.name, hbObj: hb, acc: 0, acc2: 0 };
           cars.set(c.id, o);
         }
         if (o.name !== c.name) { scene.remove(o.label); o.label = nameSprite(c.name, c.team); scene.add(o.label); o.name = c.name; }
@@ -591,18 +712,19 @@ export function createRenderer(canvas) {
         tu.set(c.u[0], c.u[1], c.u[2]);
         tl.crossVectors(tu, tf);
         if (c.boosting) {
-          o.acc = Math.min(8, o.acc + dt * 110);
+          o.acc = Math.min(8, o.acc + dt * 110 * qf);
           while (o.acc >= 1) {
             o.acc -= 1;
             const back = hb.off[0] - hb.size[0] / 2 - 4 - Math.random() * 14;
             const q = [c.p[0] + tf.x * back + tu.x * (hb.off[2] - 6), c.p[1] + tf.y * back + tu.y * (hb.off[2] - 6), c.p[2] + tf.z * back + tu.z * (hb.off[2] - 6)];
             const hot = Math.random() < 0.4;
+            const tc = o.tcol[hot ? 1 : 0];
             particles.emit(q, [c.v[0] * 0.9 - tf.x * 380 + rnd() * 70, c.v[1] * 0.9 - tf.y * 380 + rnd() * 70, c.v[2] * 0.9 - tf.z * 380 + rnd() * 70],
-              0.3 + Math.random() * 0.15, hot ? 34 : 46, 1, hot ? 0.85 : 0.5, hot ? 0.45 : 0.1);
+              0.3 + Math.random() * 0.15, (hot ? 34 : 46) * (qf < 1 ? 1.5 : 1), tc[0], tc[1], tc[2]);
           }
         } else o.acc = 0;
         if (c.ss) {
-          o.acc2 = Math.min(6, o.acc2 + dt * 70);
+          o.acc2 = Math.min(6, o.acc2 + dt * 70 * qf);
           while (o.acc2 >= 1) {
             o.acc2 -= 1;
             for (const s of [-1, 1]) {
