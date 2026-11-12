@@ -1,6 +1,8 @@
 // Render Three.js del estadio «Balón Turbo». Eje Z hacia arriba, unidades = uu (cm).
 // Todo el arte (estadio, coches, carteles) es de diseño propio y se genera por código.
 import * as THREE from 'three';
+import { buildTheme } from './maps.js';
+import { CUSTOM_BODIES } from './cars.js';
 import { ARENA, BOOST_PADS, shrunkPlan } from '../shared/arena.js';
 import { HITBOXES, TEAM_COLORS, PHYS } from '../shared/constants.js';
 
@@ -780,7 +782,8 @@ const CAR_SPECS = {
 
 function buildCar(hb, team, paint) {
   const m = carMats(team, paint);
-  const sp = CAR_SPECS[hb.id] || CAR_SPECS.estandar;
+  let sp = CAR_SPECS[hb.id] || CAR_SPECS.estandar;
+  const custom = CUSTOM_BODIES[hb.id];
   const grp = new THREE.Group();
   grp.matrixAutoUpdate = false;
   const [sx, sy, sz] = hb.size;
@@ -798,83 +801,90 @@ function buildCar(hb, team, paint) {
   const P = { paint: [], dark: [], wing: [], glass: [], team: [], head: [], tail: [], glow: [] };
   const toPts = (a) => a.map(([u, v]) => [X(u), Z(v)]);
 
-  // carrocería, cabina de cristal y techo pintado
-  P.paint.push({ g: profileGeo(toPts(sp.body), Wb, taper, null, 2.5), m: IDM });
-  const Wc = Wb * 0.8, zc0 = Z(0.4);
-  const tumble = (z) => 1 - 0.2 * clamp((z - zc0) / (zt - zc0), 0, 1);
-  P.glass.push({ g: profileGeo(toPts(sp.cab), Wc, taper, tumble, 1.4), m: IDM });
-  const top = [...sp.cab].sort((a, b) => b[1] - a[1]).slice(0, 2).sort((a, b) => a[0] - b[0]);
-  const roofPts = [[top[0][0], top[0][1] + 0.01], [top[0][0], top[0][1] - 0.13], [top[1][0], top[1][1] - 0.13], [top[1][0], top[1][1] + 0.01]];
-  P.paint.push({ g: profileGeo(toPts(roofPts.slice().reverse()), Wc * 0.9, taper, tumble, 1.0), m: IDM });
+  if (custom) {
+    // Carrocería de diseño propio (cars.js): mismo hitbox, otra forma
+    const res = custom(THREE, { size: hb.size, off: hb.off, mats: m, team, paint });
+    grp.add(res.group);
+    if (res.wheels) sp = { ...sp, ...res.wheels };
+  } else {
+    // carrocería, cabina de cristal y techo pintado
+    P.paint.push({ g: profileGeo(toPts(sp.body), Wb, taper, null, 2.5), m: IDM });
+    const Wc = Wb * 0.8, zc0 = Z(0.4);
+    const tumble = (z) => 1 - 0.2 * clamp((z - zc0) / (zt - zc0), 0, 1);
+    P.glass.push({ g: profileGeo(toPts(sp.cab), Wc, taper, tumble, 1.4), m: IDM });
+    const top = [...sp.cab].sort((a, b) => b[1] - a[1]).slice(0, 2).sort((a, b) => a[0] - b[0]);
+    const roofPts = [[top[0][0], top[0][1] + 0.01], [top[0][0], top[0][1] - 0.13], [top[1][0], top[1][1] - 0.13], [top[1][0], top[1][1] + 0.01]];
+    P.paint.push({ g: profileGeo(toPts(roofPts.slice().reverse()), Wc * 0.9, taper, tumble, 1.0), m: IDM });
 
-  // bajos, parachoques y difusor
-  bx(P.dark, ox, 0, zb + 1, L * 0.82, Wb * 0.78, 4);
-  bx(P.dark, x1 + 0.5, 0, zb + 3.5, 9, Wb * sp.nose * 0.98, 2.6);
-  bx(P.dark, x0 + 5, 0, zb + 4.5, 14, Wb * sp.tail * 0.82, 4, 0, -0.25, 0);
-  for (const f of [-0.22, 0, 0.22]) bx(P.dark, x0 + 3, f * Wb, zb + 6, 11, 1.3, 7);
-  // franjas laterales: luz del equipo y acento de pintura
-  for (const sg of [-1, 1]) {
-    bx(P.team, X(0.5), sg * (Wb / 2 + 0.9), Z(0.2), L * 0.5, 1.6, 2.2);
-    bx(P.wing, X(0.5), sg * (Wb / 2 + 0.6), Z(0.32), L * 0.46, 1.2, 2.6);
-  }
-  // faros delanteros
-  const hz = Z(0.2), hx = x1 + 0.8;
-  const nw = Wb * sp.nose;
-  switch (sp.lights) {
-    case 'bar': bx(P.head, hx, 0, hz, 2, nw * 0.78, 2.8); break;
-    case 'slit': for (const sg of [-1, 1]) bx(P.head, hx - 1, sg * nw * 0.28, Z(0.22), 2, nw * 0.26, 2, 0, 0, sg * 0.18); break;
-    case 'round': for (const sg of [-1, 1]) bx(P.head, hx - 1, sg * nw * 0.3, hz, 3, 5, 5, 0, 0, 0, cylXGeo); break;
-    case 'dual': for (const sg of [-1, 1]) for (const k of [0.2, 0.37]) bx(P.head, hx, sg * nw * k, hz, 2, nw * 0.12, 3.4); break;
-    default: for (const sg of [-1, 1]) bx(P.head, hx, sg * nw * 0.3, hz, 2.4, nw * 0.22, 3.4);
-  }
-  // pilotos traseros y franja trasera del color del equipo
-  bx(P.tail, x0 - 0.6, 0, Z(0.27), 2, Wb * sp.tail * 0.74, 2.6);
-  bx(P.team, x0 - 0.8, 0, Z(0.15), 1.6, Wb * sp.tail * 0.5, 1.8);
-  // tubo de turbo trasero con boca brillante
-  bx(P.dark, x0 - 2.5, 0, Z(0.0) + 5.5, 9, 6, 6, 0, 0, 0, cylXGeo);
-  {
-    const g = new THREE.CircleGeometry(4.6, 10).rotateY(-Math.PI / 2);
-    P.glow.push({ g, m: new THREE.Matrix4().makeTranslation(x0 - 7.1, 0, Z(0.0) + 5.5) });
-  }
-  // alerón con soportes y placas laterales del equipo
-  if (sp.wing) {
-    const w = sp.wing, wx = X(w.u), wz = Z(w.v), span = Wb * w.span;
-    bx(P.wing, wx, 0, wz, w.chord, span, w.thick, 0, w.tilt, 0);
+    // bajos, parachoques y difusor
+    bx(P.dark, ox, 0, zb + 1, L * 0.82, Wb * 0.78, 4);
+    bx(P.dark, x1 + 0.5, 0, zb + 3.5, 9, Wb * sp.nose * 0.98, 2.6);
+    bx(P.dark, x0 + 5, 0, zb + 4.5, 14, Wb * sp.tail * 0.82, 4, 0, -0.25, 0);
+    for (const f of [-0.22, 0, 0.22]) bx(P.dark, x0 + 3, f * Wb, zb + 6, 11, 1.3, 7);
+    // franjas laterales: luz del equipo y acento de pintura
     for (const sg of [-1, 1]) {
-      bx(P.team, wx, sg * span / 2, wz + 0.5, w.chord + 2, 1.6, w.endH);
-      bx(P.dark, wx + 1, sg * Wb * 0.22, (Z(w.deckV) + wz) / 2, 3, 2.4, Math.max(1, wz - Z(w.deckV)));
+      bx(P.team, X(0.5), sg * (Wb / 2 + 0.9), Z(0.2), L * 0.5, 1.6, 2.2);
+      bx(P.wing, X(0.5), sg * (Wb / 2 + 0.6), Z(0.32), L * 0.46, 1.2, 2.6);
     }
-  }
-  // piezas propias de cada modelo
-  const finPoly = (pts, w, yc, bucket, bev = 0.8) => bucket.push({ g: profileGeo(pts, w, () => 1, null, bev).translate(0, yc, 0), m: IDM });
-  switch (hb.id) {
-    case 'estandar':
-      bx(P.dark, X(0.7), 0, Z(0.52) + 1, 14, Wb * 0.28, 3, 0, 0.12, 0); // toma de aire del capó
-      break;
-    case 'plano':
-      for (const sg of [-1, 1]) bx(P.wing, X(0.9), sg * (Wb * 0.38), Z(0.2), 14, 14, 1.6, 0.0, 0, sg * 0.0); // aletas delanteras
-      break;
-    case 'tabla':
-      for (const sg of [-1, 1]) finPoly([[X(0.0), Z(0.55)], [X(0.12), Z(0.6)], [X(0.04), Z(1.22)], [X(0.0), Z(1.22)]], 3, sg * Wb * 0.34, P.wing);
-      break;
-    case 'largo':
-      finPoly([[X(0.0), Z(0.58)], [X(0.2), Z(0.66)], [X(0.07), Z(1.38)], [X(0.01), Z(1.38)]], 3.4, 0, P.wing);
-      break;
-    case 'hibrido':
-      for (const sg of [-1, 1]) bx(P.dark, X(0.36), sg * Wc * 0.32, zt + 1.4, L * 0.4, 2, 2.2); // barras de techo
-      bx(P.wing, X(0.07), 0, zt + 1.5, 10, Wc * 0.9, 1.8, 0, -0.18, 0); // alerón de portón
-      break;
-    case 'alto':
-      bx(P.team, X(0.5), 0, zt + 2.6, 5, Wc * 0.8, 3.2); // barra de luz de techo
-      for (const sg of [-1, 1]) bx(P.dark, x1 + 1, sg * nw * 0.38, Z(0.17), 3, 3, Z(0.32) - Z(0.05)); // defensa
-      break;
-    default: break;
-  }
-  for (const key of Object.keys(P)) {
-    if (!P[key].length) continue;
-    const mesh = new THREE.Mesh(mergeParts(P[key]), m[key]);
-    if (key === 'glass') mesh.renderOrder = 1;
-    grp.add(mesh);
+    // faros delanteros
+    const hz = Z(0.2), hx = x1 + 0.8;
+    const nw = Wb * sp.nose;
+    switch (sp.lights) {
+      case 'bar': bx(P.head, hx, 0, hz, 2, nw * 0.78, 2.8); break;
+      case 'slit': for (const sg of [-1, 1]) bx(P.head, hx - 1, sg * nw * 0.28, Z(0.22), 2, nw * 0.26, 2, 0, 0, sg * 0.18); break;
+      case 'round': for (const sg of [-1, 1]) bx(P.head, hx - 1, sg * nw * 0.3, hz, 3, 5, 5, 0, 0, 0, cylXGeo); break;
+      case 'dual': for (const sg of [-1, 1]) for (const k of [0.2, 0.37]) bx(P.head, hx, sg * nw * k, hz, 2, nw * 0.12, 3.4); break;
+      default: for (const sg of [-1, 1]) bx(P.head, hx, sg * nw * 0.3, hz, 2.4, nw * 0.22, 3.4);
+    }
+    // pilotos traseros y franja trasera del color del equipo
+    bx(P.tail, x0 - 0.6, 0, Z(0.27), 2, Wb * sp.tail * 0.74, 2.6);
+    bx(P.team, x0 - 0.8, 0, Z(0.15), 1.6, Wb * sp.tail * 0.5, 1.8);
+    // tubo de turbo trasero con boca brillante
+    bx(P.dark, x0 - 2.5, 0, Z(0.0) + 5.5, 9, 6, 6, 0, 0, 0, cylXGeo);
+    {
+      const g = new THREE.CircleGeometry(4.6, 10).rotateY(-Math.PI / 2);
+      P.glow.push({ g, m: new THREE.Matrix4().makeTranslation(x0 - 7.1, 0, Z(0.0) + 5.5) });
+    }
+    // alerón con soportes y placas laterales del equipo
+    if (sp.wing) {
+      const w = sp.wing, wx = X(w.u), wz = Z(w.v), span = Wb * w.span;
+      bx(P.wing, wx, 0, wz, w.chord, span, w.thick, 0, w.tilt, 0);
+      for (const sg of [-1, 1]) {
+        bx(P.team, wx, sg * span / 2, wz + 0.5, w.chord + 2, 1.6, w.endH);
+        bx(P.dark, wx + 1, sg * Wb * 0.22, (Z(w.deckV) + wz) / 2, 3, 2.4, Math.max(1, wz - Z(w.deckV)));
+      }
+    }
+    // piezas propias de cada modelo
+    const finPoly = (pts, w, yc, bucket, bev = 0.8) => bucket.push({ g: profileGeo(pts, w, () => 1, null, bev).translate(0, yc, 0), m: IDM });
+    switch (hb.id) {
+      case 'estandar':
+        bx(P.dark, X(0.7), 0, Z(0.52) + 1, 14, Wb * 0.28, 3, 0, 0.12, 0); // toma de aire del capó
+        break;
+      case 'plano':
+        for (const sg of [-1, 1]) bx(P.wing, X(0.9), sg * (Wb * 0.38), Z(0.2), 14, 14, 1.6, 0.0, 0, sg * 0.0); // aletas delanteras
+        break;
+      case 'tabla':
+        for (const sg of [-1, 1]) finPoly([[X(0.0), Z(0.55)], [X(0.12), Z(0.6)], [X(0.04), Z(1.22)], [X(0.0), Z(1.22)]], 3, sg * Wb * 0.34, P.wing);
+        break;
+      case 'largo':
+        finPoly([[X(0.0), Z(0.58)], [X(0.2), Z(0.66)], [X(0.07), Z(1.38)], [X(0.01), Z(1.38)]], 3.4, 0, P.wing);
+        break;
+      case 'hibrido':
+        for (const sg of [-1, 1]) bx(P.dark, X(0.36), sg * Wc * 0.32, zt + 1.4, L * 0.4, 2, 2.2); // barras de techo
+        bx(P.wing, X(0.07), 0, zt + 1.5, 10, Wc * 0.9, 1.8, 0, -0.18, 0); // alerón de portón
+        break;
+      case 'alto':
+        bx(P.team, X(0.5), 0, zt + 2.6, 5, Wc * 0.8, 3.2); // barra de luz de techo
+        for (const sg of [-1, 1]) bx(P.dark, x1 + 1, sg * nw * 0.38, Z(0.17), 3, 3, Z(0.32) - Z(0.05)); // defensa
+        break;
+      default: break;
+    }
+    for (const key of Object.keys(P)) {
+      if (!P[key].length) continue;
+      const mesh = new THREE.Mesh(mergeParts(P[key]), m[key]);
+      if (key === 'glass') mesh.renderOrder = 1;
+      grp.add(mesh);
+    }
   }
 
   // ruedas: pivote de dirección > giro > neumático + llanta
@@ -936,8 +946,25 @@ export function createRenderer(canvas) {
   sun.position.set(-1500, 2000, 4000);
   scene.add(sun);
 
+  const nBefore = scene.children.length;
   buildSky(scene);
   const surroundings = buildSurroundings(scene);
+  const classicObjs = scene.children.slice(nBefore);
+  const classicBg = scene.background, classicFog = scene.fog;
+  let mapId = 'clasico', theme = null;
+  function setMap(id) {
+    if (id === mapId) return;
+    if (theme) { scene.remove(theme.group); theme = null; }
+    mapId = id;
+    const isClassic = id === 'clasico';
+    for (const o of classicObjs) o.visible = isClassic;
+    scene.background = classicBg; scene.fog = classicFog;
+    if (!isClassic) {
+      theme = buildTheme(THREE, scene, id);
+      if (theme) scene.add(theme.group);
+      else { for (const o of classicObjs) o.visible = true; mapId = 'clasico'; }
+    }
+  }
   buildStadium(scene);
   const board = buildScoreboard(scene);
   const particles = createParticles(scene);
@@ -1219,6 +1246,8 @@ export function createRenderer(canvas) {
     setBallCam(v) { ballCam = !!v; },
     setShowNames(v) { showNames = !!v; },
     setShowHitbox(v) { showHitbox = !!v; },
+    setMap,
+    getMap: () => mapId,
     setQuality(q) {
       quality = q === 'baja' ? 'baja' : 'alta';
       qf = quality === 'baja' ? 0.4 : 1;
@@ -1253,6 +1282,8 @@ export function createRenderer(canvas) {
       }
     },
     render(state, myCarId, dtFrame) {
+      if (state && state.map && state.map !== mapId) setMap(state.map);
+      if (theme && theme.update) theme.update(dtFrame || 0);
       const dt = Math.min(0.1, Math.max(0.0001, dtFrame || 0.016));
       resize();
       if (!state) { renderMenuFrame(dt, lastPreview); return; }

@@ -46,6 +46,7 @@ function hitboxCenter(c) {
 export class Game {
   constructor(opts = {}) {
     this.freePlay = !!opts.freePlay;
+    this.map = ['clasico', 'neon', 'templo'].includes(opts.map) ? opts.map : 'clasico';
     this.infiniteBoost = !!opts.infiniteBoost;
     this.botLevel = clamp(opts.botLevel ?? 1, 0, 2) | 0; // 0 novato, 1 profesional, 2 experto
     this.teamSize = this.freePlay ? 1 : clamp(opts.teamSize | 0 || 1, 1, 3);
@@ -732,6 +733,7 @@ export class Game {
       score: this.score.slice(),
       teamSize: this.teamSize,
       freePlay: this.freePlay,
+      map: this.map,
       lastTouch: this.lastTouch,
       ball: { p: vec(this.ball.pos), v: vec(this.ball.vel), f: dir(this.ball.o.f), u: dir(this.ball.o.u) },
       cars: this.cars.map((c) => ({
