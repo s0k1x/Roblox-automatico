@@ -11,4 +11,22 @@ fs.mkdirSync(path.join(out, 'vendor'), { recursive: true });
 fs.copyFileSync(path.join(root, 'node_modules/three/build/three.module.js'), path.join(out, 'vendor/three.module.js'));
 fs.copyFileSync(path.join(root, 'node_modules/peerjs/dist/peerjs.min.js'), path.join(out, 'vendor/peerjs.min.js'));
 fs.writeFileSync(path.join(out, '.nojekyll'), '');
+
+// Marca de versión en todas las rutas para que el navegador no mezcle archivos viejos y nuevos.
+const ver = (process.env.GITHUB_SHA || Date.now().toString(36)).slice(0, 10);
+const tag = (u) => `${u}?v=${ver}`;
+const html = path.join(out, 'index.html');
+fs.writeFileSync(html, fs.readFileSync(html, 'utf8')
+  .replace(/(href|src)="(\.\/[^"?]+\.(?:css|js))"/g, (m, attr, u) => `${attr}="${tag(u)}"`)
+  .replace(/"three":"(\.\/vendor\/three\.module\.js)"/, (m, u) => `"three":"${tag(u)}"`));
+const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).forEach((e) => {
+  const f = path.join(dir, e.name);
+  if (e.isDirectory()) return walk(f);
+  if (!f.endsWith('.js') || f.includes(`${path.sep}vendor${path.sep}`)) return;
+  const src = fs.readFileSync(f, 'utf8');
+  const outSrc = src.replace(/(from\s+|import\s*\(\s*)(['"])(\.\.?\/[^'"?]+\.js)\2/g, (m, pre, q, u) => `${pre}${q}${tag(u)}${q}`);
+  fs.writeFileSync(f, outSrc);
+});
+walk(out);
+console.log('Versión', ver);
 console.log('Web lista en dist/');
