@@ -89,6 +89,22 @@ export const PHYS = {
   HIT_MAX_DV: 4600,
 
   DEMO_RESPAWN: 3,
+
+  // Detalles finos (medidos por la comunidad de simulación del género)
+  BOOST_MIN_TIME: 0.1, // el turbo dura al menos 0.1 s aunque se suelte antes
+  JUMP_MIN_TIME: 0.025, // el salto empuja al menos 0.025 s
+  STICKY_GROUND: 0.5, // × gravedad sobre suelo plano
+  FLIP_Z_DAMP_120: 0.35, // amortiguación vertical por tick (a 120 Hz) durante el flip
+  FLIP_Z_DAMP_START: 0.15,
+  FLIP_Z_DAMP_END: 0.21,
+  FLIP_SIDE_MAX_SPEED_SCALE: 1.9,
+  FLIP_BACKWARD_MAX_SPEED_SCALE: 2.5,
+  FLIP_BACKWARD_SCALE_X: 16 / 15,
+  SUPERSONIC_MAINTAIN_MAX: 1.0,
+  BUMP_COOLDOWN: 0.25,
+  BUMP_VEL_GROUND: [[0, 5 / 6], [1400, 1100], [2200, 1530]],
+  BUMP_VEL_AIR: [[0, 5 / 6], [1400, 1390], [2200, 1945]],
+  BUMP_VEL_UP: [[0, 2 / 6], [1400, 278], [2200, 417]],
 };
 
 // Clases de hitbox (largo, ancho, alto) y desplazamiento del centro de la caja

@@ -6,24 +6,43 @@ export const ARENA = {
   HX: 4096, // mitad del ancho (x)
   HY: 5120, // mitad del largo (y) hasta la pared de fondo
   H: 2044, // altura del techo
-  PLAN_R: 1152, // radio de las esquinas vistas en planta
+  CORNER: 1152, // catetos del corte diagonal (45°) de cada esquina vista en planta
   EDGE_R: 300, // radio de las curvas suelo-pared y pared-techo
   GW: 892.755, // mitad del ancho de la portería
   GH: 642.775, // altura de la portería
   GD: 880, // profundidad de la portería
 };
 
-const { HX, HY, H, PLAN_R, EDGE_R, GW, GH, GD } = ARENA;
+const { HX, HY, H, CORNER, EDGE_R, GW, GH, GD } = ARENA;
 
-function sdRoundRect(x, y, hx, hy, r) {
-  const qx = Math.abs(x) - hx + r;
-  const qy = Math.abs(y) - hy + r;
-  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+// Octógono del suelo: rectángulo de medias (hx, hy) con las esquinas cortadas a 45° (catetos c).
+// Devuelve la distancia con signo en planta (negativa dentro).
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(px - ax - dx * t, py - ay - dy * t);
+}
+export function sdOctagon(x, y, hx, hy, c) {
+  const ax = Math.abs(x), ay = Math.abs(y);
+  const d = Math.min(
+    segDist(ax, ay, hx, -1e-6, hx, hy - c),
+    segDist(ax, ay, hx, hy - c, hx - c, hy),
+    segDist(ax, ay, hx - c, hy, -1e-6, hy),
+  );
+  const inside = ax <= hx && ay <= hy && ax + ay <= hx + hy - c;
+  return inside ? -d : d;
 }
 
-// Signo negativo dentro del volumen libre del estadio (caja con bordes redondeados).
+// Octógono reducido EDGE_R hacia dentro: su contorno, desplazado EDGE_R, es la superficie real
+// (paredes, diagonales y curvas suelo-pared / pared-techo de radio EDGE_R).
+export function shrunkPlan(hy = HY) {
+  return { hx: HX - EDGE_R, hy: hy - EDGE_R, c: CORNER - EDGE_R * (2 - Math.SQRT2) };
+}
+
+// Signo negativo dentro del volumen libre del estadio.
 function sdArena(x, y, z, hy) {
-  const a = sdRoundRect(x, y, HX, hy, PLAN_R) + EDGE_R;
+  const s = shrunkPlan(hy);
+  const a = sdOctagon(x, y, s.hx, s.hy, s.c);
   const b = Math.abs(z - H / 2) - (H / 2 - EDGE_R);
   return Math.hypot(Math.max(a, 0), Math.max(b, 0)) + Math.min(Math.max(a, b), 0) - EDGE_R;
 }

@@ -264,7 +264,9 @@ export class Game {
     c.noGround = Math.max(0, c.noGround - dt);
 
     // Turbo
-    const boosting = inp.boost && c.boost > 0;
+    if (inp.boost && c.boost > 0) c.boostHold = Math.max(c.boostHold || 0, P.BOOST_MIN_TIME);
+    const boosting = (inp.boost || c.boostHold > 0) && c.boost > 0;
+    c.boostHold = Math.max(0, (c.boostHold || 0) - dt);
     if (boosting) c.boost = Math.max(0, c.boost - P.BOOST_USE * dt);
     c.boosting = boosting;
 
@@ -318,8 +320,9 @@ export class Game {
         if (inp.handbrake) yawRate *= 1.35;
         c.ang = scale(n, yawRate);
 
-        // Fuerza que pega el coche a la superficie
-        acc = addS(acc, n, -P.STICKY_ACCEL);
+        // Fuerza que pega el coche a la superficie: 0.5 g en suelo, hasta 1.5 g en paredes
+        const sticky = P.STICKY_GROUND + (n[2] < Math.SQRT1_2 ? 1 - Math.abs(n[2]) : 0);
+        acc = addS(acc, n, sticky * P.GRAVITY);
 
         // En paredes/techo, a poca velocidad, el coche se despega.
         if (n[2] < 0.3 && len(c.vel) < 450 && Math.abs(inp.throttle) < 0.1 && !boosting) {
@@ -335,7 +338,7 @@ export class Game {
       c.flipTimer += dt;
       if (c.jumping) {
         c.jumpTime += dt;
-        if (inp.jump && c.jumpTime < P.JUMP_HOLD_MAX) acc = addS(acc, o.u, P.JUMP_HOLD_ACCEL);
+        if ((inp.jump || c.jumpTime < P.JUMP_MIN_TIME) && c.jumpTime < P.JUMP_HOLD_MAX) acc = addS(acc, o.u, P.JUMP_HOLD_ACCEL);
         else c.jumping = false;
       }
 
@@ -349,11 +352,16 @@ export class Game {
           if (m > 1) { fwd /= m; side /= m; }
           const fh = norm([o.f[0], o.f[1], 0], [1, 0, 0]);
           const rh = [fh[1], -fh[0], 0];
+          // Impulso del flip según la velocidad hacia delante (hacia atrás y de lado se escalan)
           const fwdSpeed = dot(c.vel, fh);
-          const fi = fwd >= 0 ? P.DODGE_FORWARD * fwd : P.DODGE_BACKWARD * fwd;
-          const si = P.DODGE_SIDE * side * (1 + (0.9 * Math.abs(fwdSpeed)) / P.CAR_MAX_SPEED);
+          const ratio = Math.min(1, Math.abs(fwdSpeed) / P.CAR_MAX_SPEED);
+          const backwards = Math.abs(fwdSpeed) < 100 ? fwd < 0 : (fwd >= 0) !== (fwdSpeed > 0);
+          let fi = P.DODGE_FORWARD * fwd;
+          let si = P.DODGE_SIDE * side;
+          fi *= ((backwards ? P.FLIP_BACKWARD_MAX_SPEED_SCALE : 1) - 1) * ratio + 1;
+          si *= (P.FLIP_SIDE_MAX_SPEED_SCALE - 1) * ratio + 1;
+          if (backwards) fi *= P.FLIP_BACKWARD_SCALE_X;
           c.vel = add(c.vel, add(scale(fh, fi), scale(rh, si)));
-          if (c.vel[2] < 0) c.vel[2] = 0;
           c.dodge = { t: 0, pitch: fwd, roll: side };
         } else {
           c.vel = addS(c.vel, o.u, P.DOUBLE_JUMP_IMPULSE);
@@ -369,6 +377,10 @@ export class Game {
       const alpha = [0, 0, 0];
       if (c.dodge) {
         c.dodge.t += dt;
+        // Durante el flip se frena la velocidad vertical (cae menos y sube menos)
+        if (c.dodge.t >= P.FLIP_Z_DAMP_START && (c.vel[2] < 0 || c.dodge.t < P.FLIP_Z_DAMP_END)) {
+          c.vel[2] *= Math.pow(1 - P.FLIP_Z_DAMP_120, dt * 120);
+        }
         const d = c.dodge;
         // Cancelación del flip: tirar del stick en sentido contrario anula el giro de cabeceo.
         const cancel = d.pitch !== 0 && Math.sign(pitchIn) === Math.sign(d.pitch) && Math.abs(pitchIn) > 0.5;
@@ -408,7 +420,9 @@ export class Game {
     c.o = integrateBasis(c.o, c.ang, dt);
 
     const sp = len(c.vel);
-    c.supersonic = sp >= P.SUPERSONIC || (c.supersonic && sp >= P.SUPERSONIC_KEEP);
+    if (sp >= P.SUPERSONIC) { c.supersonic = true; c.ssTime = 0; }
+    else if (c.supersonic && sp >= P.SUPERSONIC_KEEP && (c.ssTime = (c.ssTime || 0) + dt) < P.SUPERSONIC_MAINTAIN_MAX) c.supersonic = true;
+    else c.supersonic = false;
 
     this.collideCarArena(c, dt);
   }
@@ -642,16 +656,28 @@ export class Game {
           return true;
         };
         if (tryDemo(a, b, n) || tryDemo(b, a, scale(n, -1))) continue;
-        // Choque: impulso con un poco de rebote + empujón hacia arriba
-        const j = (-(1 + 0.3) * rv) / 2;
+        // Choque físico (poco rebote)
+        const j = (-(1 + 0.1) * rv) / 2;
         a.vel = addS(a.vel, n, -j);
         b.vel = addS(b.vel, n, j);
-        const bump = Math.min(Math.abs(rv), 1500) * 0.25;
-        const faster = len(a.vel) > len(b.vel) ? b : a;
-        faster.vel = addS(faster.vel, [0, 0, 1], bump * 0.6);
-        faster.grounded = false;
-        faster.noGround = 0.1;
-        this.events.push({ type: 'bump', a: a.id, b: b.id });
+        // Empujón: lo da quien golpea con el morro; depende de su velocidad hacia el otro coche
+        const key = a.id < b.id ? `${a.id}-${b.id}` : `${b.id}-${a.id}`;
+        this.bumpCd = this.bumpCd || new Map();
+        if ((this.bumpCd.get(key) || 0) > this.time) continue;
+        const tryBump = (att, vic, dir) => {
+          const sp = dot(att.vel, dir);
+          if (sp < 100 || dot(att.o.f, dir) < 0.5) return false;
+          const dh = norm([dir[0], dir[1], 0], dir);
+          const amount = curve(vic.grounded ? P.BUMP_VEL_GROUND : P.BUMP_VEL_AIR, sp);
+          vic.vel = clampLen(add(vic.vel, add(scale(dh, amount), [0, 0, curve(P.BUMP_VEL_UP, sp)])), P.CAR_MAX_SPEED);
+          vic.grounded = false;
+          vic.noGround = 0.1;
+          return true;
+        };
+        if (tryBump(a, b, n) || tryBump(b, a, scale(n, -1))) {
+          this.bumpCd.set(key, this.time + P.BUMP_COOLDOWN);
+          this.events.push({ type: 'bump', a: a.id, b: b.id });
+        }
       }
     }
   }

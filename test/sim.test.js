@@ -79,4 +79,41 @@ ok(g.score[0] === 1 && g.phase === 'play' && Math.hypot(g.ball.pos[0], g.ball.po
 g = new Game({ teamSize: 2, botLevel: 0 }); run(g, 20);
 ok(g.cars.every((c) => c.pos.every(Number.isFinite)), 'bots novatos estables');
 
+// Flip delantero: +500 uu/s; flip trasero a velocidad: impulso mayor (escala hacia atrás)
+const flipGain = (startSpeed, pitch) => {
+  const gg = new Game({ teamSize: 1 }); for (const c of gg.cars) gg.setHuman(c.id);
+  gg.phase = 'play'; gg.ball.pos = [3000, 3000, 93];
+  const car = gg.cars[0]; gg.placeCar(car, [0, -3000], Math.PI / 2); car.vel = [0, startSpeed, 0];
+  let before = 0;
+  for (let i = 0; i < 40; i++) {
+    gg.setInput(0, { jump: i < 3 || (i >= 10 && i < 12), pitch: i >= 9 ? pitch : 0, throttle: 0 });
+    if (i === 9) before = car.vel[1];
+    gg.step();
+  }
+  return car.vel[1] - before;
+};
+const gF = flipGain(0, -1), gB = flipGain(1000, 1);
+ok(Math.abs(gF - 500) < 30, `flip delantero desde parado +${gF.toFixed(0)} (500)`);
+ok(gB < -700, `flip trasero a 1000 uu/s: ${gB.toFixed(0)} (más que 533 por la escala)`);
+
+// Empujón entre coches: el que golpea con el morro empuja al otro
+g = new Game({ teamSize: 1 }); for (const c of g.cars) g.setHuman(c.id);
+g.phase = 'play'; g.kickoffTouched = true; g.ball.pos = [3000, 3000, 93];
+const at = g.cars[0], vi = g.cars[1];
+g.placeCar(at, [0, -500], Math.PI / 2); at.vel = [0, 1400, 0];
+g.placeCar(vi, [0, -300], 0);
+let bumped = false;
+run(g, 0.5, () => { g.setInput(0, { throttle: 1 }); if (g.events.find((e) => e.type === 'bump')) bumped = true; });
+ok(bumped && vi.vel[1] > 300, `empujón: el coche golpeado sale a ${vi.vel[1].toFixed(0)} uu/s`);
+
+// Subir por la pared lateral y por la diagonal de la esquina
+for (const [name, start, yaw] of [['pared', [2500, 0], 0], ['diagonal', [2400, 3200], Math.PI / 4]]) {
+  g = new Game({ teamSize: 1 }); for (const c of g.cars) g.setHuman(c.id);
+  g.phase = 'play'; g.ball.pos = [-3000, -3000, 93];
+  const w = g.cars[0]; g.placeCar(w, start, yaw); w.vel = [Math.cos(yaw) * 1400, Math.sin(yaw) * 1400, 0];
+  let mz = 0, wallGround = false;
+  run(g, 1.5, () => { g.setInput(0, { throttle: 1 }); mz = Math.max(mz, w.pos[2]); if (w.grounded && w.n[2] < 0.3) wallGround = true; });
+  ok(mz > 300 && wallGround, `sube por la ${name} (altura ${mz.toFixed(0)})`);
+}
+
 process.exit(fails ? 1 : 0);
