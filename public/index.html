@@ -5,6 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Balón Turbo</title>
 <link rel="stylesheet" href="./style.css">
+<script>
+// Aviso visible si el juego no puede arrancar (en vez de quedarse sin responder).
+(function () {
+  function box(title, detail) {
+    var d = document.getElementById('bt-fatal');
+    if (!d) {
+      d = document.createElement('div'); d.id = 'bt-fatal';
+      d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:#2a0d12;color:#ffd7dc;border:1px solid #ff5a6e;border-radius:10px;padding:12px 14px;font:14px/1.4 system-ui,sans-serif;max-height:45vh;overflow:auto';
+      (document.body || document.documentElement).appendChild(d);
+    }
+    d.innerHTML = '<b>' + title + '</b><br><span style="opacity:.85">' + String(detail).replace(/</g, '&lt;') + '</span>';
+  }
+  window.__btFatal = box;
+  window.addEventListener('error', function (e) { if (document.getElementById('bt-fatal')) return; box('Error al cargar el juego', (e.message || e) + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '')); });
+  window.addEventListener('unhandledrejection', function (e) { box('Error en el juego', e.reason && (e.reason.message || e.reason)); });
+  if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('importmap')) {
+    window.addEventListener('DOMContentLoaded', function () { box('Navegador demasiado antiguo', 'Actualiza Chrome, Edge, Firefox o Safari a la última versión.'); });
+  }
+  setTimeout(function () {
+    if (!window.__bt && !document.getElementById('bt-fatal')) box('El juego no ha arrancado', 'Prueba a recargar con Ctrl+F5. Si sigue igual, usa Chrome o Edge actualizados y activa la aceleración por hardware (Ajustes → Sistema).');
+  }, 6000);
+})();
+</script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 </head>
 <body>

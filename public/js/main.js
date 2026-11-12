@@ -6,7 +6,13 @@ import { createRenderer } from './render.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
-const renderer = createRenderer(canvas);
+let renderer;
+try {
+  renderer = createRenderer(canvas);
+} catch (e) {
+  if (window.__btFatal) window.__btFatal('Tu navegador no puede mostrar gráficos 3D (WebGL)', 'Activa la aceleración por hardware en los ajustes del navegador (Chrome/Edge: Ajustes → Sistema) y recarga. Detalle: ' + (e && e.message));
+  throw e;
+}
 const input = createInput();
 
 // ---------- ajustes persistentes ----------
