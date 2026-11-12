@@ -19,12 +19,12 @@ button.primary{background:linear-gradient(90deg,#14b89a,#2f8cff);border:0;font-w
 .row.col .row{margin-top:0}
 .row input{text-transform:uppercase;letter-spacing:.3em;text-align:center;margin:0;flex:1}
 .seg{display:flex;gap:6px}.seg button{flex:1}
-#settings .s{display:grid;grid-template-columns:110px 1fr 46px;gap:8px;align-items:center;font-size:13px;color:var(--dim);margin:4px 0}
-#settings input[type=range]{accent-color:var(--neon);width:100%}
-#settings .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--dim);margin-top:6px}
-#controls{width:100%;font-size:12px;border-collapse:collapse}
-#controls td{padding:3px 4px;border-bottom:1px solid #1a2540;vertical-align:top}
-#controls td:first-child{color:var(--neon);white-space:nowrap;padding-right:10px}
+.s{display:grid;grid-template-columns:minmax(120px,170px) 1fr 58px;gap:8px;align-items:center;font-size:13px;color:var(--dim);margin:4px 0}
+.s input[type=range]{accent-color:var(--neon);width:100%}
+.spanel .chk,#settings2 .chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--dim);margin-top:6px}
+.controls{width:100%;font-size:12px;border-collapse:collapse}
+.controls td{padding:3px 4px;border-bottom:1px solid #1a2540;vertical-align:top}
+.controls td:first-child{color:var(--neon);white-space:nowrap;padding-right:10px}
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;z-index:5}
 #scoreboard{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;background:#060a14cc;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-weight:900}
@@ -65,7 +65,7 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
 
 /* ---------- menú de inicio ---------- */
 #menu{background:linear-gradient(90deg,#03060df2 0%,#03060dd0 34%,#03060d55 62%,#03060d00 100%);align-items:stretch;justify-content:flex-start;padding:0;overflow:hidden;animation:fadeIn .5s ease both}
-.shell{display:flex;flex-direction:column;width:min(600px,100%);height:100%;padding:clamp(14px,3.5vh,34px) clamp(16px,3vw,44px) 14px;overflow-y:auto}
+.shell{display:flex;flex-direction:column;width:min(600px,100%);height:calc(100% - 64px);padding:clamp(14px,3.5vh,34px) clamp(16px,3vw,44px) 14px;overflow-y:auto}
 .brand{flex:none}
 .logo{display:flex;align-items:center;gap:10px;font-size:clamp(30px,6vw,56px);line-height:1;font-weight:900;font-style:italic;letter-spacing:.06em;transform:skewX(-6deg);transform-origin:left}
 .logo .mark{color:var(--neon);filter:drop-shadow(0 0 10px #39f3c8aa);flex:none;width:.85em;height:.85em}
@@ -133,7 +133,7 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
   .card{padding:12px 16px 12px 20px}.card b{font-size:19px}.card span{font-size:13px}
   #hb-list{grid-template-columns:repeat(2,1fr)}
   #stats{grid-template-columns:repeat(2,1fr)}
-  #settings .s{grid-template-columns:96px 1fr 44px}
+  .s{grid-template-columns:96px 1fr 50px}
 }
 @media(max-height:560px) and (min-width:761px){.tag,.hints{display:none}.card{padding:9px 16px 9px 22px}.card b{font-size:18px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -145,3 +145,71 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
 @media(max-width:760px){#menu.in-garage .brand{display:flex}#menu.in-garage .tag{display:none}}
 @media(max-width:760px){#menu.in-garage .stage{margin-top:calc(24vh - 20px)}}
 @media(max-width:760px){#menu.in-garage .stage{margin-top:calc(31vh - 20px)}}
+
+/* ---------- pantalla de título ---------- */
+#title{background:radial-gradient(ellipse at 50% 45%,#03060d33 0%,#03060d99 60%,#03060ddd 100%);flex-direction:column;justify-content:center;cursor:pointer;z-index:20;animation:fadeIn .6s ease both}
+.t-wrap{text-align:center;margin-top:-8vh}
+.big-logo{font-size:clamp(40px,8vw,112px);justify-content:center;transform:skewX(-6deg);transform-origin:center;filter:drop-shadow(0 8px 30px #000a)}
+.t-tag{color:#c3d0ea;font-size:clamp(14px,2vw,22px);margin-top:14px;letter-spacing:.06em}
+#t-press{position:absolute;bottom:14vh;left:0;right:0;text-align:center;font-size:clamp(16px,2.4vw,26px);letter-spacing:.18em;text-transform:uppercase;color:#fff;text-shadow:0 0 14px var(--neon);animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+/* ---------- menú principal ---------- */
+.cards.list{gap:9px}
+.cards.list .card{flex-direction:row;align-items:baseline;gap:12px;padding:11px 18px 11px 24px;flex-wrap:wrap}
+.cards.list .card b{font-size:21px;min-width:150px}
+.cards.list .card span{font-size:13px}
+.c6{--cc:#8fa0c4}
+#challenges{position:absolute;top:clamp(14px,3.5vh,34px);right:clamp(14px,3vw,40px);width:min(290px,28vw);background:#0b1224e6;border:1px solid var(--line);border-radius:4px 18px 4px 18px;padding:16px 18px 14px;display:none;box-shadow:0 10px 40px #0008}
+#menu.in-home #challenges{display:block;animation:viewIn .35s ease both}
+#challenges h3{font-size:18px;letter-spacing:.14em;text-transform:uppercase;font-style:italic;color:#ffd166}
+.ch-sub{color:#8fa0c4;font-size:12px;margin:2px 0 10px}
+.ch{margin-top:12px}
+.ch-top{display:flex;justify-content:space-between;gap:8px;font-size:14px;color:#e8f0ff}
+.ch-top span{color:#b4c2e0;font-variant-numeric:tabular-nums}
+.ch-bar{height:9px;border-radius:5px;background:#060a14;border:1px solid #1d2a47;margin-top:6px;overflow:hidden}
+.ch-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#39f3c8,#ffd166);transition:width .4s}
+.ch.done .ch-top{color:#9bff57}
+.ch.done .ch-bar i{background:#9bff57}
+#profbar{position:absolute;left:0;right:0;bottom:0;height:60px;display:flex;align-items:center;gap:14px;padding:0 clamp(16px,3vw,44px);background:linear-gradient(0deg,#03060dee,#03060d88);border-top:1px solid #24324f88}
+.pb-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#39f3c8,#ff4d6d);color:#031018;font-weight:900;font-size:20px;display:flex;align-items:center;justify-content:center;flex:none}
+.pb-info{min-width:0;width:clamp(120px,22vw,260px)}
+.pb-info b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb-xp{height:6px;border-radius:3px;background:#060a14;border:1px solid #1d2a47;margin-top:5px;overflow:hidden}
+.pb-xp i{display:block;height:100%;width:0;background:linear-gradient(90deg,#39f3c8,#ffd166)}
+.pb-lvl{display:flex;align-items:baseline;gap:6px}
+.pb-lvl small{color:#8fa0c4;font-size:12px;text-transform:uppercase;letter-spacing:.12em}
+.pb-lvl b{font-size:26px;font-style:italic;color:#ffd166}
+/* ajustes */
+#menu.in-settings .shell{width:min(780px,100%)}
+.spanel>.lbl:first-child{margin-top:4px}
+.spanel .s{margin:7px 0}
+.spanel .seg{margin:4px 0 8px}
+.spanel .seg button{min-height:40px}
+.spanel .chk{font-size:14px;margin:9px 0}
+.set-foot{margin-top:16px;flex-wrap:wrap}
+.set-foot button{flex:1}
+.mini{margin-top:10px;font-size:13px;padding:7px 12px}
+.row-lbl{color:#b4c2e0;font-size:13px;margin-top:8px}
+/* interfaz en partida */
+#fps{position:fixed;left:8px;top:6px;z-index:30;font:12px/1 monospace;color:#9bff57;background:#000a;padding:3px 6px;border-radius:4px;pointer-events:none}
+#scoreboard{transform:translateX(-50%) scale(var(--ui,1));transform-origin:top center}
+#speed{transform:scale(var(--ui,1));transform-origin:bottom right}
+#boost{transform:scale(var(--ui,1));transform-origin:bottom right}
+@media(max-width:900px){#challenges{display:none!important}}
+@media(max-width:760px){
+  .shell{height:calc(100% - 52px)}
+  #profbar{height:52px}
+  .cards.list{gap:6px}
+  .cards.list .card{padding:8px 14px 8px 18px}
+  .cards.list .card b{font-size:17px;min-width:0}
+  .cards.list .card span{display:none}
+  .big-logo{font-size:9vw;gap:6px}
+}
+@media(max-height:620px) and (min-width:761px){.cards.list .card span{display:none}.cards.list .card{padding:7px 16px 7px 22px}}
+#menu.in-settings .tag{display:none}
+#menu.in-settings .stage{margin-top:8px}
+#menu.in-settings .stage-head{min-height:40px;margin-bottom:6px}
+#menu.in-settings .spanel .s{margin:5px 0}
+#menu.in-settings .spanel .chk{margin:6px 0}
+#menu.in-settings .seg.tabs{margin-bottom:6px}
+.t-wrap{margin-top:-22vh}

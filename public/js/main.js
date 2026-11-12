@@ -3,6 +3,7 @@ import { HITBOXES, TEAM_COLORS, TEAM_NAMES, DT } from '../shared/constants.js';
 import { hostRoom, joinRoom } from './net.js';
 import { createInput } from './input.js';
 import { createRenderer } from './render.js';
+import { createAudio } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -14,51 +15,157 @@ try {
   throw e;
 }
 const input = createInput();
+const audio = createAudio();
 
 // ---------- ajustes persistentes ----------
-const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', fov: 110, dist: 270, height: 110, angle: -3, stiff: 0.45, ballcamDefault: false,
-  botLevel: 1, infBoost: false, quality: 'alta', showSpeed: true,
+const CAM_PRESETS = {
+  default: { fov: 110, dist: 270, height: 110, angle: -3, stiff: 0.45 },
+  close: { fov: 100, dist: 200, height: 90, angle: -2, stiff: 0.6 },
+  far: { fov: 100, dist: 350, height: 130, angle: -4, stiff: 0.35 },
+};
+const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', ...CAM_PRESETS.default, ballcamDefault: false,
+  camPreset: 'default', shake: true, swivel: 5, transition: 1, invertLook: false,
+  rumble: true, showNames: true, stickSens: 100,
+  botLevel: 1, infBoost: false, quality: 'alta', fpsLimit: 0, showFps: false,
+  showSpeed: true, showScore: true, uiScale: 100,
+  volMaster: 80, volSfx: 80, volEngine: 60, volMusic: 50,
+  challenges: { week: '', prog: {} },
   paint: { a: '#2fd6b5', b: '#14213d', w: '#d9e2f2', t: '#ffb347' },
   stats: { matches: 0, wins: 0, goals: 0, saves: 0, shots: 0, demos: 0 } };
 let cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('balonturbo') || '{}')); } catch (e) { /* sin almacenamiento */ }
 cfg.paint = { ...DEFAULTS.paint, ...(cfg.paint || {}) };
 cfg.stats = { ...DEFAULTS.stats, ...(cfg.stats || {}) };
+cfg.challenges = { week: '', prog: {}, ...(cfg.challenges || {}) };
 function save() { try { localStorage.setItem('balonturbo', JSON.stringify(cfg)); } catch (e) { /* ignorar */ } }
-function applyCam() {
-  renderer.setCameraSettings({ fov: cfg.fov, dist: cfg.dist, height: cfg.height, angle: cfg.angle, stiff: cfg.stiff });
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// Definición de cada pestaña de ajustes: [tipo, clave, etiqueta, ...extra]
+const SCHEMA = {
+  play: [
+    ['check', 'rumble', 'Vibración del mando'],
+    ['check', 'showNames', 'Mostrar nombres de los jugadores'],
+    ['range', 'stickSens', 'Sensibilidad del stick', 50, 150, 5, ' %'],
+  ],
+  cam: [
+    ['seg', 'camPreset', 'Preajuste', [['default', 'Predeterminado'], ['close', 'Cercana'], ['far', 'Alejada'], ['custom', 'Personalizada']]],
+    ['check', 'shake', 'Temblor de cámara'],
+    ['range', 'fov', 'Campo de visión', 60, 110, 1, '°'],
+    ['range', 'dist', 'Distancia', 100, 400, 5, ''],
+    ['range', 'height', 'Altura', 40, 200, 5, ''],
+    ['range', 'angle', 'Ángulo', -15, 0, 1, '°'],
+    ['range', 'stiff', 'Rigidez', 0, 1, 0.05, ''],
+    ['range', 'swivel', 'Velocidad de giro', 1, 10, 0.5, ''],
+    ['range', 'transition', 'Velocidad de transición', 1, 2, 0.1, ''],
+    ['check', 'invertLook', 'Invertir giro'],
+    ['check', 'ballcamDefault', 'Cámara balón por defecto'],
+  ],
+  ui: [
+    ['check', 'showSpeed', 'Mostrar velocímetro'],
+    ['check', 'showScore', 'Mostrar marcador'],
+    ['check', 'showNames', 'Mostrar nombres de los jugadores'],
+    ['range', 'uiScale', 'Escala de la interfaz', 80, 120, 5, ' %'],
+  ],
+  vid: [
+    ['seg', 'quality', 'Calidad', [['alta', 'Alta'], ['baja', 'Baja']]],
+    ['seg', 'fpsLimit', 'Limitar FPS', [[30, '30'], [60, '60'], [0, 'Sin límite']]],
+    ['check', 'showFps', 'Mostrar FPS'],
+  ],
+  aud: [
+    ['range', 'volMaster', 'Volumen general', 0, 100, 5, ' %'],
+    ['range', 'volSfx', 'Efectos', 0, 100, 5, ' %'],
+    ['range', 'volEngine', 'Motor', 0, 100, 5, ' %'],
+    ['range', 'volMusic', 'Música del menú', 0, 100, 5, ' %'],
+  ],
+};
+// Sanear valores guardados
+for (const items of Object.values(SCHEMA)) for (const it of items) {
+  if (it[0] === 'range') { const v = parseFloat(cfg[it[1]]); cfg[it[1]] = Number.isFinite(v) ? clampN(v, it[3], it[4]) : DEFAULTS[it[1]]; }
+  else if (it[0] === 'check') cfg[it[1]] = !!cfg[it[1]];
 }
-applyCam();
-renderer.setQuality(cfg.quality);
+if (![30, 60].includes(cfg.fpsLimit)) cfg.fpsLimit = 0;
+if (cfg.quality !== 'baja') cfg.quality = 'alta';
+if (!['default', 'close', 'far', 'custom'].includes(cfg.camPreset) ||
+  (cfg.camPreset !== 'custom' && Object.keys(CAM_PRESETS.default).some((k) => cfg[k] !== CAM_PRESETS[cfg.camPreset][k]))) cfg.camPreset = 'custom';
+
+const R = (fn, ...args) => { if (renderer && typeof renderer[fn] === 'function') renderer[fn](...args); };
+function applyCam() {
+  R('setCameraSettings', { fov: cfg.fov, dist: cfg.dist, height: cfg.height, angle: cfg.angle, stiff: cfg.stiff,
+    swivel: cfg.swivel, transition: cfg.transition, shake: cfg.shake });
+}
+function applyAudio() {
+  audio.setVolumes({ master: cfg.volMaster / 100, sfx: cfg.volSfx / 100, engine: paused ? 0 : cfg.volEngine / 100, music: cfg.volMusic / 100 });
+}
+function applyUI() {
+  document.documentElement.style.setProperty('--ui', String(cfg.uiScale / 100));
+  $('speed').classList.toggle('hidden', !cfg.showSpeed);
+  $('scoreboard').classList.toggle('hidden', training || !cfg.showScore);
+  $('fps').classList.toggle('hidden', !cfg.showFps);
+}
+function applyAll() {
+  applyCam(); applyAudio(); applyUI();
+  R('setQuality', cfg.quality);
+  R('setShowNames', cfg.showNames);
+}
 
 // ---------- menú ----------
-const SLIDERS = [
-  ['fov', 'Campo de visión', 70, 130, 1, '°'],
-  ['dist', 'Distancia', 100, 400, 5, ''],
-  ['height', 'Altura', 20, 250, 5, ''],
-  ['angle', 'Ángulo', -15, 10, 1, '°'],
-  ['stiff', 'Rigidez', 0, 1, 0.05, ''],
-];
-function buildSettings(box) {
-  box.innerHTML = '';
-  for (const [key, label, min, max, step, unit] of SLIDERS) {
-    const row = document.createElement('div');
-    row.className = 's';
-    row.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}"><b></b>`;
-    const r = row.querySelector('input'), b = row.querySelector('b');
-    r.value = cfg[key]; b.textContent = cfg[key] + unit;
-    r.addEventListener('input', () => { cfg[key] = parseFloat(r.value); b.textContent = cfg[key] + unit; applyCam(); save(); });
-    box.appendChild(row);
-  }
-  const chk = document.createElement('label');
-  chk.className = 'chk';
-  chk.innerHTML = '<input type="checkbox"> Cámara balón por defecto';
-  const c = chk.querySelector('input');
-  c.checked = !!cfg.ballcamDefault;
-  c.addEventListener('change', () => { cfg.ballcamDefault = c.checked; save(); });
-  box.appendChild(chk);
+const refreshers = new Set();
+function refreshAll() { for (const f of refreshers) { if (f.box.isConnected) f(); else refreshers.delete(f); } }
+const fmtNum = (v) => String(Math.round(v * 100) / 100);
+function changed(key, v) {
+  cfg[key] = v;
+  if (key === 'camPreset' && CAM_PRESETS[v]) Object.assign(cfg, CAM_PRESETS[v]);
+  else if (key in CAM_PRESETS.default) cfg.camPreset = 'custom';
+  save(); applyAll(); refreshAll();
 }
-buildSettings($('settings'));
+function resetKeys(tab) {
+  for (const it of SCHEMA[tab]) cfg[it[1]] = DEFAULTS[it[1]];
+  if (tab === 'cam') Object.assign(cfg, CAM_PRESETS.default);
+  save(); applyAll(); refreshAll();
+}
+function buildTab(box, tab, withReset) {
+  box.innerHTML = '';
+  for (const it of SCHEMA[tab]) {
+    const [type, key, label] = it;
+    const wrap = document.createElement('div');
+    let refresh;
+    if (type === 'range') {
+      const [, , , min, max, step, unit] = it;
+      wrap.className = 's';
+      wrap.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}" aria-label="${label}"><b></b>`;
+      const r = wrap.querySelector('input'), b = wrap.querySelector('b');
+      r.addEventListener('input', () => changed(key, parseFloat(r.value)));
+      refresh = () => { r.value = cfg[key]; b.textContent = fmtNum(cfg[key]) + unit; };
+    } else if (type === 'check') {
+      wrap.innerHTML = `<label class="chk"><input type="checkbox"> ${label}</label>`;
+      const c = wrap.querySelector('input');
+      c.addEventListener('change', () => changed(key, c.checked));
+      refresh = () => { c.checked = !!cfg[key]; };
+    } else {
+      wrap.innerHTML = `<div class="row-lbl">${label}</div><div class="seg"></div>`;
+      const seg = wrap.querySelector('.seg');
+      for (const [v, t] of it[3]) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = t;
+        b.addEventListener('click', () => changed(key, v));
+        seg.appendChild(b);
+      }
+      refresh = () => { [...seg.children].forEach((b, i) => b.classList.toggle('on', it[3][i][0] === cfg[key])); };
+    }
+    refresh.box = wrap;
+    refreshers.add(refresh); refresh();
+    box.appendChild(wrap);
+  }
+  if (withReset) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'mini'; b.textContent = 'Restablecer';
+    b.addEventListener('click', () => resetKeys(tab));
+    box.appendChild(b);
+  }
+}
+function buildSettings(box) { buildTab(box, 'cam', true); }
+for (const t of ['play', 'cam', 'ui', 'vid', 'aud']) buildTab($('st-' + t), t, true);
+$('btn-set-default').addEventListener('click', () => { for (const t of Object.keys(SCHEMA)) resetKeys(t); });
 
 const playerName = () => (cfg.name.trim() || 'Piloto').slice(0, 16);
 const msg = (t) => { $('menu-msg').textContent = t || ''; };
@@ -124,16 +231,14 @@ $('in-name').addEventListener('input', () => { cfg.name = $('in-name').value; sa
 $('in-code').addEventListener('input', () => { $('in-code').value = $('in-code').value.replace(/[^a-zA-Z]/g, '').toUpperCase(); });
 $('chk-boost').checked = !!cfg.infBoost;
 $('chk-boost').addEventListener('change', () => { cfg.infBoost = $('chk-boost').checked; save(); });
-$('chk-speed').checked = cfg.showSpeed !== false;
-$('chk-speed').addEventListener('change', () => { cfg.showSpeed = $('chk-speed').checked; save(); $('speed').classList.toggle('hidden', !cfg.showSpeed); });
-
 // Pestañas de ajustes
+const TABS = ['play', 'cam', 'ctl', 'ui', 'vid', 'aud'];
 function setSettingsTab(t) {
   for (const b of $('set-tabs').children) { const on = b.dataset.stab === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }
-  for (const id of ['cam', 'ctl', 'gfx', 'ui']) $('st-' + id).classList.toggle('hidden', id !== t);
+  for (const id of TABS) $('st-' + id).classList.toggle('hidden', id !== t);
 }
 for (const b of $('set-tabs').children) b.addEventListener('click', () => setSettingsTab(b.dataset.stab));
-setSettingsTab('cam');
+setSettingsTab('play');
 
 // Perfil
 const STAT_LABELS = [['matches', 'Partidos'], ['wins', 'Victorias'], ['goals', 'Goles'], ['saves', 'Paradas'], ['shots', 'Tiros'], ['demos', 'Demoliciones']];
@@ -147,8 +252,62 @@ function renderStats() {
     box.appendChild(d);
   }
 }
-$('btn-stats-reset').addEventListener('click', () => { cfg.stats = { ...DEFAULTS.stats }; save(); renderStats(); });
+$('btn-stats-reset').addEventListener('click', () => { cfg.stats = { ...DEFAULTS.stats }; cfg.challenges.prog = {}; save(); renderStats(); renderChallenges(); });
 renderStats();
+
+// Experiencia y nivel (según estadísticas locales)
+const XP_PER = { matches: 100, goals: 50, wins: 30, saves: 20, demos: 25, shots: 5 };
+function levelInfo() {
+  let xp = 0;
+  for (const k in XP_PER) xp += (cfg.stats[k] | 0) * XP_PER[k];
+  const lvl = 1 + Math.floor(Math.sqrt(xp / 150));
+  const lo = 150 * (lvl - 1) ** 2, hi = 150 * lvl * lvl;
+  return { lvl, frac: (xp - lo) / (hi - lo) };
+}
+function renderProfBar() {
+  const { lvl, frac } = levelInfo();
+  const name = (cfg.name.trim() || 'Piloto').slice(0, 16);
+  $('pb-name').textContent = name;
+  $('pb-avatar').textContent = name.charAt(0).toUpperCase();
+  $('pb-lvl').textContent = String(lvl);
+  $('pb-xpbar').style.width = Math.round(clampN(frac, 0, 1) * 100) + '%';
+}
+$('in-name').addEventListener('input', renderProfBar);
+
+// Desafíos semanales (se renuevan cada lunes)
+const CH_POOL = [
+  { id: 'goals', txt: 'Marca 5 goles', n: 5 }, { id: 'wins', txt: 'Gana 2 partidos', n: 2 }, { id: 'saves', txt: 'Haz 3 paradas', n: 3 },
+  { id: 'demos', txt: 'Haz 2 demoliciones', n: 2 }, { id: 'shots', txt: 'Haz 8 tiros', n: 8 }, { id: 'matches', txt: 'Juega 3 partidos', n: 3 },
+];
+function weekInfo() {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // lunes de esta semana
+  const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  return { key, idx: Math.floor(d.getTime() / 604800000) };
+}
+function currentChallenges() {
+  const w = weekInfo();
+  if (cfg.challenges.week !== w.key) { cfg.challenges = { week: w.key, prog: {} }; save(); }
+  const base = (w.idx % 2) * 3;
+  return [0, 1, 2].map((i) => CH_POOL[base + i]);
+}
+function renderChallenges() {
+  const box = $('ch-list');
+  box.innerHTML = '';
+  for (const c of currentChallenges()) {
+    const v = Math.min(c.n, cfg.challenges.prog[c.id] | 0);
+    const d = document.createElement('div');
+    d.className = 'ch' + (v >= c.n ? ' done' : '');
+    d.innerHTML = '<div class="ch-top"><b></b><span></span></div><div class="ch-bar"><i></i></div>';
+    d.querySelector('b').textContent = c.txt;
+    d.querySelector('span').textContent = `${v}/${c.n}`;
+    d.querySelector('i').style.width = Math.round(v / c.n * 100) + '%';
+    box.appendChild(d);
+  }
+}
+function refreshProfile() { renderProfBar(); renderChallenges(); }
+refreshProfile();
 
 // ---------- navegación del menú (ratón, teclado y mando) ----------
 const VIEW_TITLES = { home: '', play: 'Jugar', online: 'Online', bots: 'Contra bots', train: 'Entrenamiento libre', garage: 'Garaje', settings: 'Ajustes', profile: 'Perfil' };
@@ -169,10 +328,13 @@ function go(v, keepFocus) {
   $('view-title').textContent = VIEW_TITLES[v] || '';
   $('btn-back').classList.toggle('hidden', v === 'home');
   menuEl.classList.toggle('in-garage', v === 'garage');
-  if (v === 'profile') renderStats();
+  menuEl.classList.toggle('in-home', v === 'home');
+  menuEl.classList.toggle('in-settings', v === 'settings');
+  if (v === 'profile') { renderStats(); renderProfBar(); }
+  if (v === 'home') refreshProfile();
   if (!keepFocus) focusFirst();
 }
-function back() { if (view !== 'home') { msg(''); go(VIEW_PARENT[view] || 'home'); } }
+function back() { if (view !== 'home') { audio.ui('back'); msg(''); go(VIEW_PARENT[view] || 'home'); } }
 $('btn-back').addEventListener('click', back);
 for (const b of menuEl.querySelectorAll('[data-go]')) b.addEventListener('click', () => { msg(''); go(b.dataset.go); });
 
@@ -195,7 +357,7 @@ function moveFocus(dir) {
     const sc = main + perp * 3;
     if (sc < bestScore) { bestScore = sc; best = el; }
   }
-  if (best) best.focus();
+  if (best) { best.focus(); audio.ui('move'); }
 }
 function fireDir(dir) {
   const el = document.activeElement;
@@ -209,7 +371,7 @@ function fireDir(dir) {
 }
 const ARROWS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 window.addEventListener('keydown', (e) => {
-  if (mode !== 'menu') return;
+  if (mode !== 'menu' || onTitle) return;
   document.body.classList.remove('usepad');
   if (e.code === 'Escape') { e.preventDefault(); back(); return; }
   const dir = ARROWS[e.code];
@@ -233,6 +395,10 @@ function resetPadMenu() { padSt.a = padSt.b = true; for (const k of ['up', 'down
 function pollMenuPad(now) {
   const p = firstPad();
   if (!p) return;
+  if (onTitle) {
+    if (p.buttons.some((b) => b && b.pressed) || Math.abs(p.axes[0] || 0) > 0.7 || Math.abs(p.axes[1] || 0) > 0.7) leaveTitle();
+    return;
+  }
   const btn = (i) => !!(p.buttons[i] && p.buttons[i].pressed);
   const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
   const want = { up: ay < -0.6 || btn(12), down: ay > 0.6 || btn(13), left: ax < -0.6 || btn(14), right: ax > 0.6 || btn(15) };
@@ -255,6 +421,8 @@ function pollMenuPad(now) {
 
 // ---------- estado de la aplicación ----------
 let mode = 'menu'; // menu | local | host | online
+let onTitle = true; // pantalla de título (modo 'menu' con el menú oculto)
+let ignoreClickUntil = 0;
 let paused = false;
 let game = null;
 let acc = 0;
@@ -276,15 +444,119 @@ let showHit = false;
 
 function show(id, v) { $(id).classList.toggle('hidden', !v); }
 
+// ---------- pantalla de título ----------
+function leaveTitle() {
+  if (!onTitle) return;
+  onTitle = false;
+  audio.unlock();
+  ignoreClickUntil = performance.now() + 400; // que el clic de entrada no pulse nada del menú
+  show('title', false); show('menu', true);
+  resetPadMenu();
+  go('home');
+  audio.menu(true);
+  audio.ui('select');
+}
+function showTitle() {
+  onTitle = true;
+  show('menu', false); show('title', true);
+  resetPadMenu();
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+}
+$('title').addEventListener('pointerdown', (e) => { e.preventDefault(); leaveTitle(); });
+window.addEventListener('keydown', (e) => {
+  if (!onTitle || mode !== 'menu') return;
+  if (e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code)) return;
+  e.preventDefault(); leaveTitle();
+});
+window.addEventListener('click', (e) => { if (performance.now() < ignoreClickUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
+$('btn-exit').addEventListener('click', showTitle);
+// sonidos del menú
+menuEl.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('button');
+  if (!b || b.id === 'btn-back' || b.id === 'btn-set-back') return;
+  audio.ui(['btn-bots', 'btn-train', 'btn-create', 'btn-join'].includes(b.id) ? 'start' : 'select');
+});
+$('btn-set-back').addEventListener('click', back);
+let hoverBtn = null;
+menuEl.addEventListener('mouseover', (e) => {
+  const b = e.target.closest && e.target.closest('button');
+  if (b && b !== hoverBtn) audio.ui('move');
+  hoverBtn = b || null;
+});
+
+// ---------- mirar alrededor ----------
+const look = { x: 0, y: 0, mid: false, mx: 0, my: 0, sent: false };
+const altArrows = new Set();
+const LOOK_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+window.addEventListener('mousedown', (e) => { if (e.button === 1 && mode !== 'menu') { e.preventDefault(); look.mid = true; } });
+window.addEventListener('mouseup', (e) => { if (e.button === 1) look.mid = false; });
+window.addEventListener('mousemove', (e) => { look.mx = e.clientX / innerWidth * 2 - 1; look.my = e.clientY / innerHeight * 2 - 1; });
+window.addEventListener('blur', () => { look.mid = false; altArrows.clear(); });
+// Alt + flechas: se capturan antes que la conducción para no mover el coche
+window.addEventListener('keydown', (e) => {
+  if (mode === 'menu' || !e.altKey || !LOOK_KEYS.includes(e.code)) return;
+  e.preventDefault(); e.stopImmediatePropagation(); altArrows.add(e.code);
+}, true);
+window.addEventListener('keyup', (e) => { altArrows.delete(e.code); }, true);
+const dz15 = (v) => (Math.abs(v) < 0.15 ? 0 : v);
+function updateLook() {
+  let x = 0, y = 0;
+  if (!paused && mode !== 'menu') {
+    if (look.mid) { x = look.mx; y = -look.my; }
+    if (altArrows.has('ArrowRight')) x += 1;
+    if (altArrows.has('ArrowLeft')) x -= 1;
+    if (altArrows.has('ArrowUp')) y += 1;
+    if (altArrows.has('ArrowDown')) y -= 1;
+    const p = firstPad();
+    if (p) { const rx = dz15(p.axes[2] || 0), ry = dz15(p.axes[3] || 0); if (rx || ry) { x = rx; y = -ry; } }
+    if (cfg.invertLook) { x = -x; y = -y; }
+    x = clampN(x, -1, 1); y = clampN(y, -1, 1);
+  }
+  if (x || y || look.sent) { R('setLook', x, y); look.sent = !!(x || y); }
+}
+
+// Entrada con sensibilidad del stick aplicada
+function readInput() {
+  const i = input.read();
+  const p = cfg.stickSens !== 100 ? firstPad() : null;
+  if (p) {
+    const k = cfg.stickSens / 100;
+    if (Math.abs(p.axes[0] || 0) > 0.12) { i.steer = clampN(i.steer * k, -1, 1); i.yaw = clampN(i.yaw * k, -1, 1); }
+    if (Math.abs(p.axes[1] || 0) > 0.12) i.pitch = clampN(i.pitch * k, -1, 1);
+  }
+  return i;
+}
+
+// Vibración del mando
+function rumble(strong, weak, ms) {
+  if (!cfg.rumble) return;
+  const p = firstPad(), a = p && p.vibrationActuator;
+  if (!a || !a.playEffect) return;
+  try {
+    const r = a.playEffect('dual-rumble', { startDelay: 0, duration: ms, weakMagnitude: weak, strongMagnitude: strong });
+    if (r && r.catch) r.catch(() => {});
+  } catch (e) { /* sin vibración */ }
+}
+function onEvents(events, s) {
+  renderer.handleEvents(events, s);
+  audio.events(events, s, myCarId);
+  handleHudEvents(events, s);
+  for (const e of events) {
+    if (e.type === 'touch' && e.car === myCarId) rumble(clampN(0.15 + e.speed / 4500, 0.15, 1), 0.3, 130);
+    else if (e.type === 'demo' && (e.attacker === myCarId || e.victim === myCarId)) rumble(1, 0.8, 380);
+    else if (e.type === 'bump' && (e.a === myCarId || e.b === myCarId)) rumble(0.5, 0.3, 100);
+  }
+}
+
 let training = false;
 let trainGoals = 0;
 function enterGame(m) {
   mode = m; paused = false;
   training = !!(game && game.freePlay);
   trainGoals = 0; $('train-goals').textContent = '0';
-  $('scoreboard').classList.toggle('hidden', training);
   show('train-info', training);
-  $('speed').classList.toggle('hidden', cfg.showSpeed === false);
+  applyUI();
+  audio.menu(false);
   show('menu', false); show('hud', true); show('pause', false); show('endscreen', false);
   show('room-code', m === 'online' || m === 'host'); show('conn', false);
   ballCam = !!cfg.ballcamDefault;
@@ -300,6 +572,7 @@ function toMenu(message) {
   if (ws) { try { ws.close(); } catch (e) { /* nada */ } ws = null; }
   if (host) { try { host.close(); } catch (e) { /* nada */ } host = null; hostHumans.clear(); }
   mode = 'menu'; game = null; latest = null; snaps = []; paused = false;
+  applyAudio(); audio.menu(true);
   show('menu', true); show('hud', false); show('pause', false); show('endscreen', false);
   msg(message);
   resetPadMenu();
@@ -396,7 +669,7 @@ async function startOnline(code) {
           latest = s;
           snaps.push(s);
           if (snaps.length > 80) snaps.shift();
-          if (s.events && s.events.length) { renderer.handleEvents(s.events, s); handleHudEvents(s.events, s); }
+          if (s.events && s.events.length) onEvents(s.events, s);
         } else if (m.type === 'error') msg(m.message || '');
       },
       onClose() { if (mode === 'online') toMenu('El anfitrión ha cerrado la sala o se ha perdido la conexión.'); },
@@ -435,6 +708,7 @@ function setPause(v) {
   if (mode === 'menu') return;
   paused = v;
   show('pause', v);
+  applyAudio();
   if (!v) { const b = $('settings2'); if (b) b.remove(); input.reset(); }
 }
 function trainBall(inFront) {
@@ -508,6 +782,10 @@ function addStats(s) {
   st.matches++;
   if (s.score[me.team] > s.score[1 - me.team]) st.wins++;
   st.goals += me.st[0]; st.saves += me.st[1]; st.shots += me.st[2]; st.demos += me.st[3];
+  currentChallenges();
+  const pr = cfg.challenges.prog, won = s.score[me.team] > s.score[1 - me.team] ? 1 : 0;
+  const add = { goals: me.st[0], saves: me.st[1], shots: me.st[2], demos: me.st[3], wins: won, matches: 1 };
+  for (const k in add) pr[k] = (pr[k] | 0) + add[k];
   save();
 }
 function showEnd(s) {
@@ -562,16 +840,23 @@ function interpolated(dt) {
 // ---------- bucle ----------
 let last = performance.now();
 let selPrev = false;
+let fpsN = 0, fpsT = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  if (cfg.fpsLimit && now - last < 1000 / cfg.fpsLimit - 1.5) return;
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (cfg.showFps) {
+    fpsN++; fpsT += dt;
+    if (fpsT >= 0.5) { $('fps').textContent = Math.round(fpsN / fpsT) + ' FPS'; fpsN = 0; fpsT = 0; }
+  }
 
   if (mode === 'menu') {
     pollMenuPad(now);
-    renderer.renderMenu(dt, { hb: cfg.hitbox, paint: cfg.paint, team: 0, view: view === 'garage' ? 'garage' : 'menu' });
+    renderer.renderMenu(dt, { hb: cfg.hitbox, paint: cfg.paint, team: 0, view: onTitle ? 'title' : view === 'garage' ? 'garage' : view === 'home' ? 'home' : 'menu' });
     return;
   }
+  updateLook();
 
   // Entrenamiento: botón Select/View del mando = balón delante del coche
   const gp = firstPad();
@@ -588,7 +873,7 @@ function frame(now) {
       acc += dt;
       let steps = 0;
       while (acc >= DT && steps < 12) {
-        game.setInput(0, paused ? {} : input.read());
+        game.setInput(0, paused ? {} : readInput());
         game.step();
         if (game.events.length) for (const e of game.events) { pendingEvents.push(e); if (host) netEvents.push(e); }
         if (host && ++tickCount % 3 === 0) {
@@ -603,23 +888,26 @@ function frame(now) {
     }
     const s = game.serialize();
     s.events = pendingEvents;
-    if (pendingEvents.length) { renderer.handleEvents(pendingEvents, s); handleHudEvents(pendingEvents, s); }
+    if (pendingEvents.length) onEvents(pendingEvents, s);
     pendingEvents = [];
     s.events = [];
     updateHud(s, paused ? 0 : dt);
     renderer.render(s, myCarId, paused ? 0.0001 : dt);
+    if (!paused) audio.update(s, myCarId, dt);
   } else if (mode === 'online') {
     if (ws && now - lastSent >= 1000 / 60 - 1) {
       lastSent = now;
-      ws.sendInput(paused ? { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, handbrake: false } : input.read());
+      ws.sendInput(paused ? { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, handbrake: false } : readInput());
     }
     const s = interpolated(dt);
     if (s) {
       updateHud(latest || s, dt);
       renderer.render(s, myCarId, dt);
+      if (!paused) audio.update(s, myCarId, dt);
     }
   }
 }
+applyAll();
 requestAnimationFrame(frame);
 
 // Útil para pruebas

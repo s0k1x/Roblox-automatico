@@ -76,7 +76,20 @@
   </div>
 </div>
 
-<div id="menu" class="overlay">
+<div id="fps" class="hidden">0 FPS</div>
+
+<div id="title" class="overlay" role="button" aria-label="Pulsa cualquier tecla o botón para empezar">
+  <div class="t-wrap">
+    <h1 class="logo big-logo" aria-label="Balón Turbo">
+      <svg class="mark" viewBox="0 0 48 48" width="46" height="46" aria-hidden="true"><circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="3"/><path d="M27 6 15 27h9l-3 15 13-23h-9z" fill="currentColor"/></svg>
+      <span class="l1">BALÓN</span><span class="l2">TURBO</span>
+    </h1>
+    <p class="t-tag">Fútbol con coches. Sin descanso, sin frenos.</p>
+  </div>
+  <p id="t-press">Pulsa cualquier tecla o botón</p>
+</div>
+
+<div id="menu" class="overlay hidden">
   <div class="shell">
     <header class="brand">
       <h1 class="logo" aria-label="Balón Turbo">
@@ -93,12 +106,13 @@
       </div>
 
       <section class="view" id="v-home" aria-label="Menú principal">
-        <div class="cards">
-          <button class="card c1" type="button" data-go="play"><b>Jugar</b><span>Partidas online o contra bots</span></button>
-          <button class="card c2" type="button" data-go="train"><b>Entrenamiento</b><span>Balón libre, sin reloj ni rivales</span></button>
+        <div class="cards list">
+          <button class="card c1" type="button" data-go="play"><b>Jugar</b><span>Online o contra bots</span></button>
+          <button class="card c2" type="button" data-go="train"><b>Entrenamiento</b><span>Balón libre, sin reloj</span></button>
           <button class="card c3" type="button" data-go="garage"><b>Garaje</b><span>Carrocería, colores y estela</span></button>
-          <button class="card c4" type="button" data-go="settings"><b>Ajustes</b><span>Cámara, controles y gráficos</span></button>
+          <button class="card c4" type="button" data-go="settings"><b>Ajustes</b><span>Juego, cámara, controles, vídeo y audio</span></button>
           <button class="card c5" type="button" data-go="profile"><b>Perfil</b><span>Tu nombre y tus estadísticas</span></button>
+          <button class="card c6" type="button" id="btn-exit"><b>Salir</b><span>Volver a la pantalla de título</span></button>
         </div>
       </section>
 
@@ -145,31 +159,43 @@
 
       <section class="view hidden" id="v-settings" aria-label="Ajustes">
         <div class="seg tabs" id="set-tabs" role="tablist">
-          <button type="button" role="tab" data-stab="cam">Cámara</button><button type="button" role="tab" data-stab="ctl">Controles</button><button type="button" role="tab" data-stab="gfx">Gráficos</button><button type="button" role="tab" data-stab="ui">Interfaz</button>
+          <button type="button" role="tab" data-stab="play">Jugabilidad</button><button type="button" role="tab" data-stab="cam">Cámara</button><button type="button" role="tab" data-stab="ctl">Controles</button><button type="button" role="tab" data-stab="ui">Interfaz</button><button type="button" role="tab" data-stab="vid">Vídeo</button><button type="button" role="tab" data-stab="aud">Audio</button>
         </div>
-        <div class="spanel" id="st-cam"><div id="settings"></div></div>
+        <div class="spanel" id="st-play"></div>
+        <div class="spanel hidden" id="st-cam"></div>
         <div class="spanel hidden" id="st-ctl">
-          <table id="controls">
+          <div class="lbl">Teclado y ratón</div>
+          <table class="controls">
             <tr><td>W / S</td><td>Acelerar / frenar · morro abajo / arriba</td></tr>
             <tr><td>A / D</td><td>Girar · guiñada</td></tr>
             <tr><td>Q / E</td><td>Alabeo en el aire</td></tr>
             <tr><td>Espacio / clic dcho.</td><td>Salto (doble pulsación: voltereta)</td></tr>
             <tr><td>Mayús / clic izq.</td><td>Turbo</td></tr>
             <tr><td>Ctrl / C</td><td>Derrape · giro libre</td></tr>
+            <tr><td>Botón central + ratón</td><td>Mirar alrededor</td></tr>
+            <tr><td>Alt + ↑ ↓ ← →</td><td>Mirar alrededor con el teclado</td></tr>
             <tr><td>R</td><td>Cámara balón</td></tr>
             <tr><td>H</td><td>Ver hitbox</td></tr>
             <tr><td>T / G</td><td>Entrenamiento: balón delante / al centro</td></tr>
             <tr><td>Esc</td><td>Pausa</td></tr>
-            <tr><td>Mando</td><td>RT/LT, stick, A salto, B turbo, X derrape, Y cámara, LB/RB alabeo, Select balón delante (entrenamiento)</td></tr>
+          </table>
+          <div class="lbl">Mando</div>
+          <table class="controls">
+            <tr><td>RT / LT</td><td>Acelerar / frenar</td></tr>
+            <tr><td>Stick izquierdo</td><td>Girar y morro arriba / abajo</td></tr>
+            <tr><td>Stick derecho</td><td>Mirar alrededor</td></tr>
+            <tr><td>A / B / X</td><td>Salto / turbo / derrape</td></tr>
+            <tr><td>Y</td><td>Cámara balón</td></tr>
+            <tr><td>LB / RB</td><td>Alabeo en el aire</td></tr>
+            <tr><td>Select</td><td>Entrenamiento: balón delante</td></tr>
           </table>
         </div>
-        <div class="spanel hidden" id="st-gfx">
-          <div class="lbl">Calidad</div>
-          <div class="seg" data-key="quality"><button type="button" data-v="alta">Alta</button><button type="button" data-v="baja">Baja</button></div>
-          <p class="note">Baja ajusta la imagen a la resolución normal y reduce las partículas: ideal para equipos modestos.</p>
-        </div>
-        <div class="spanel hidden" id="st-ui">
-          <label class="chk"><input type="checkbox" id="chk-speed"> Mostrar velocidad en pantalla</label>
+        <div class="spanel hidden" id="st-ui"></div>
+        <div class="spanel hidden" id="st-vid"></div>
+        <div class="spanel hidden" id="st-aud"></div>
+        <div class="row set-foot">
+          <button id="btn-set-back" type="button">Volver</button>
+          <button id="btn-set-default" type="button">Predeterminado</button>
         </div>
       </section>
 
@@ -183,6 +209,21 @@
 
     <div id="menu-msg" role="status" aria-live="polite"></div>
     <footer class="hints">Flechas moverse · Intro elegir · Esc volver · Mando: cruceta o stick, A elegir, B volver</footer>
+  </div>
+
+  <aside id="challenges" aria-label="Desafíos semanales">
+    <h3>Desafíos</h3>
+    <p class="ch-sub">Se renuevan cada lunes</p>
+    <div id="ch-list"></div>
+  </aside>
+
+  <div id="profbar">
+    <div class="pb-avatar" id="pb-avatar">P</div>
+    <div class="pb-info">
+      <b id="pb-name">Piloto</b>
+      <div class="pb-xp"><i id="pb-xpbar"></i></div>
+    </div>
+    <div class="pb-lvl"><small>Nivel</small><b id="pb-lvl">1</b></div>
   </div>
 </div>
 <script src="./vendor/peerjs.min.js"></script>
