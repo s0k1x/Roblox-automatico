@@ -1,0 +1,16 @@
+{
+  "name": "balon-turbo",
+  "version": "1.0.0",
+  "description": "Fútbol de coches en el navegador con física de coche-balón (servidor Node + Three.js)",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/sim.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "three": "0.170.0",
+    "ws": "8.18.0"
+  }
+}

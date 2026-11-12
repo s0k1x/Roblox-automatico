@@ -1,9 +1,6 @@
 services:
-  web:
+  juego:
     build: .
     ports:
-      - "5000:5000"
-    environment:
-      SECRET_KEY: ${SECRET_KEY:-change-me}
-      PORT: 5000
+      - "3000:3000"
     restart: unless-stopped
