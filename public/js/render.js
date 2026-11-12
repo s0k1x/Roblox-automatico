@@ -580,7 +580,8 @@ export function createRenderer(canvas) {
     showAng += dt * (garage ? 0.55 : 0.32);
     cam.orbit += dt * 0.07;
     const C = [0, -700, 17];
-    const r = garage ? 300 : 360;
+    const r0 = garage ? 340 : 380;
+    const r = camera.aspect < 1 ? r0 * Math.min(1.9, 0.95 / Math.max(0.3, camera.aspect)) : r0;
     const a = cam.orbit + 0.9;
     const h = garage ? 95 : 120;
     camera.position.set(C[0] + Math.sin(a) * r, C[1] - Math.cos(a) * r, C[2] + h);
@@ -591,7 +592,7 @@ export function createRenderer(canvas) {
     const vh = r * Math.tan(camera.fov * D2R / 2);
     const aspect = camera.aspect;
     let tx = C[0], ty = C[1], tz = C[2] + 12;
-    if (aspect >= 1) { const sh = vh * aspect * 0.42; tx -= rx * sh; ty -= ry * sh; }
+    if (aspect >= 1) { const sh = vh * aspect * 0.3; tx -= rx * sh; ty -= ry * sh; }
     else { tz -= vh * 0.5; }
     camera.lookAt(tx, ty, tz);
 

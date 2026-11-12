@@ -303,7 +303,7 @@ function toMenu(message) {
   show('menu', true); show('hud', false); show('pause', false); show('endscreen', false);
   msg(message);
   resetPadMenu();
-  go(message ? 'play' : 'home');
+  go(message ? 'online' : 'home');
 }
 
 function startLocal() {
