@@ -1,15 +1,19 @@
 {
   "name": "balon-turbo",
   "version": "1.0.0",
-  "description": "Fútbol de coches en el navegador con física de coche-balón (servidor Node + Three.js)",
+  "description": "Fútbol de coches en el navegador; online de PC a PC (WebRTC)",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/sim.test.js"
+    "test": "node test/sim.test.js",
+    "build": "node scripts/build.mjs"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
+    "peerjs": "^1.5.4",
     "three": "0.170.0",
     "ws": "8.18.0"
   }

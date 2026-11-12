@@ -1,7 +1,7 @@
 // Render Three.js del estadio. Eje Z hacia arriba, unidades = uu.
 import * as THREE from 'three';
-import { ARENA, BOOST_PADS } from '/shared/arena.js';
-import { HITBOXES, TEAM_COLORS, PHYS } from '/shared/constants.js';
+import { ARENA, BOOST_PADS } from '../shared/arena.js';
+import { HITBOXES, TEAM_COLORS, PHYS } from '../shared/constants.js';
 
 const { HX, HY, H, PLAN_R, EDGE_R, GW, GH, GD } = ARENA;
 const A = HX - EDGE_R;

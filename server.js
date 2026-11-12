@@ -36,6 +36,7 @@ function mapUrl(pathname) {
   if (pathname === '/') return path.join(PUBLIC_DIR, 'index.html');
   if (pathname === '/vendor/three.module.js') return path.join(THREE_BUILD, 'three.module.js');
   if (pathname === '/vendor/three.core.js') return path.join(THREE_BUILD, 'three.core.js');
+  if (pathname === '/vendor/peerjs.min.js') return path.join(ROOT, 'node_modules', 'peerjs', 'dist', 'peerjs.min.js');
   if (pathname.startsWith('/shared/')) return resolveSafe(SHARED_DIR, pathname.slice('/shared/'.length));
   return resolveSafe(PUBLIC_DIR, pathname.slice(1));
 }

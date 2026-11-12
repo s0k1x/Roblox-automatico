@@ -1,5 +1,6 @@
-import { Game } from '/shared/sim.js';
-import { HITBOXES, TEAM_COLORS, TEAM_NAMES, DT } from '/shared/constants.js';
+import { Game } from '../shared/sim.js';
+import { HITBOXES, TEAM_COLORS, TEAM_NAMES, DT } from '../shared/constants.js';
+import { hostRoom, joinRoom } from './net.js';
 import { createInput } from './input.js';
 import { createRenderer } from './render.js';
 
@@ -69,12 +70,16 @@ const playerName = () => ($('in-name').value.trim() || 'Piloto').slice(0, 16);
 const msg = (t) => { $('menu-msg').textContent = t || ''; };
 
 // ---------- estado de la aplicación ----------
-let mode = 'menu'; // menu | local | online
+let mode = 'menu'; // menu | local | host | online
 let paused = false;
 let game = null;
 let acc = 0;
 let pendingEvents = [];
-let ws = null;
+let ws = null; // conexión del invitado con el anfitrión
+let host = null; // sala propia (anfitrión)
+let hostHumans = new Map(); // peerId -> carId
+let netEvents = [];
+let tickCount = 0;
 let myCarId = 0;
 let roomCode = '';
 let snaps = [];
@@ -90,7 +95,7 @@ function show(id, v) { $(id).classList.toggle('hidden', !v); }
 function enterGame(m) {
   mode = m; paused = false;
   show('menu', false); show('hud', true); show('pause', false); show('endscreen', false);
-  show('room-code', m === 'online'); show('conn', false);
+  show('room-code', m === 'online' || m === 'host'); show('conn', false);
   ballCam = !!cfg.ballcamDefault;
   renderer.setBallCam(ballCam);
   renderer.setShowHitbox(showHit);
@@ -101,7 +106,8 @@ function enterGame(m) {
 }
 
 function toMenu(message) {
-  if (ws) { try { ws.onclose = null; ws.close(); } catch (e) { /* nada */ } ws = null; }
+  if (ws) { try { ws.close(); } catch (e) { /* nada */ } ws = null; }
+  if (host) { try { host.close(); } catch (e) { /* nada */ } host = null; hostHumans.clear(); }
   mode = 'menu'; game = null; latest = null; snaps = []; paused = false;
   show('menu', true); show('hud', false); show('pause', false); show('endscreen', false);
   msg(message);
@@ -115,43 +121,99 @@ function startLocal() {
   enterGame('local');
 }
 
-function startOnline(code) {
+// ---------- Anfitrión: este PC ejecuta la física y los demás se conectan ----------
+function pickCar() {
+  const humans = [0, 0];
+  for (const c of game.cars) if (!c.isBot) humans[c.team]++;
+  const order = humans[1] < humans[0] ? [1, 0] : [0, 1];
+  for (const team of order) {
+    const c = game.cars.find((x) => x.team === team && x.isBot);
+    if (c) return c.id;
+  }
+  return -1;
+}
+
+async function startHost() {
   cfg.name = $('in-name').value; save();
-  msg('Conectando…');
-  let sock;
+  msg('Creando sala…');
+  game = new Game({ teamSize: cfg.teamSize });
+  game.setHuman(0, playerName(), cfg.hitbox);
+  myCarId = 0; acc = 0; pendingEvents = []; netEvents = []; tickCount = 0; hostHumans.clear();
   try {
-    sock = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws');
-  } catch (e) { msg('No se pudo conectar con el servidor.'); return; }
-  ws = sock;
+    host = await hostRoom({
+      onJoin(peerId, m) {
+        if (!game) return { type: 'error', message: 'La sala ya no existe.' };
+        const carId = pickCar();
+        if (carId < 0) return { type: 'error', message: 'La sala está llena.' };
+        const hb = typeof m.hitbox === 'string' ? m.hitbox : 'estandar';
+        game.setHuman(carId, String(m.name || 'Jugador').slice(0, 16), hb);
+        hostHumans.set(peerId, carId);
+        banner(`${game.cars[carId].name} se ha unido`, '', '#39f3c8', 2, 0);
+        return { type: 'welcome', room: host ? host.code : '', carId, teamSize: game.teamSize };
+      },
+      onInput(peerId, i) {
+        const carId = hostHumans.get(peerId);
+        if (carId !== undefined && game) game.setInput(carId, i);
+      },
+      onControl(peerId, m) {
+        if (m.type === 'restart' && game && game.phase === 'ended') { game.restart(); show('endscreen', false); hudState.ended = false; }
+      },
+      onLeave(peerId) {
+        const carId = hostHumans.get(peerId);
+        hostHumans.delete(peerId);
+        if (carId !== undefined && game) {
+          const name = game.cars[carId].name;
+          game.setBot(carId);
+          banner(`${name} se ha ido`, 'Su coche lo lleva un bot', '#ffb347', 2, 0);
+        }
+      },
+      onError(text) { msg(text); },
+    });
+  } catch (e) {
+    game = null;
+    toMenu(e.message || 'No se pudo crear la sala.');
+    return;
+  }
+  if (mode !== 'menu' || !host) return;
+  roomCode = host.code;
+  $('room-code').innerHTML = `Sala <b>${host.code}</b> · pásale el código a tus amigos · no cierres ni minimices esta pestaña`;
+  enterGame('host');
+}
+
+// ---------- Invitado ----------
+async function startOnline(code) {
+  cfg.name = $('in-name').value; save();
+  msg('Conectando con el anfitrión…');
   snaps = []; latest = null; roomCode = '';
-  let welcomed = false;
-  sock.onopen = () => sock.send(JSON.stringify({ type: 'join', room: code || null, teamSize: cfg.teamSize, name: playerName(), hitbox: cfg.hitbox }));
-  sock.onmessage = (ev) => {
-    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-    if (m.type === 'welcome') {
-      welcomed = true; myCarId = m.carId; roomCode = m.room;
-      $('room-code').innerHTML = `Sala <b>${m.room}</b>`;
-      enterGame('online');
-    } else if (m.type === 'state') {
-      const s = m.s;
-      latest = s;
-      snaps.push(s);
-      if (snaps.length > 80) snaps.shift();
-      if (s.events && s.events.length) { renderer.handleEvents(s.events, s); handleHudEvents(s.events, s); }
-    } else if (m.type === 'error') {
-      if (!welcomed) toMenu(m.message || 'Error del servidor.');
-      else msg(m.message || '');
-    }
-  };
-  sock.onclose = () => {
-    if (ws !== sock) return;
-    if (!welcomed) toMenu('No se pudo conectar con el servidor.');
-    else show('conn', true);
-  };
+  let conn;
+  try {
+    conn = await joinRoom(code, { type: 'join', name: playerName(), hitbox: cfg.hitbox }, {
+      onMessage(m) {
+        if (m.type === 'welcome') {
+          myCarId = m.carId; roomCode = m.room;
+          $('room-code').innerHTML = `Sala <b>${m.room}</b>`;
+          enterGame('online');
+        } else if (m.type === 'state') {
+          const s = m.s;
+          if (latest && s.t < latest.t) return; // paquete desordenado
+          latest = s;
+          snaps.push(s);
+          if (snaps.length > 80) snaps.shift();
+          if (s.events && s.events.length) { renderer.handleEvents(s.events, s); handleHudEvents(s.events, s); }
+        } else if (m.type === 'error') msg(m.message || '');
+      },
+      onClose() { if (mode === 'online') toMenu('El anfitrión ha cerrado la sala o se ha perdido la conexión.'); },
+    });
+  } catch (e) {
+    toMenu(e.message || 'No se pudo conectar.');
+    return;
+  }
+  if (mode !== 'online') { conn.close(); return; }
+  ws = conn;
 }
 
 $('btn-bots').addEventListener('click', startLocal);
-$('btn-create').addEventListener('click', () => startOnline(null));
+$('btn-create').addEventListener('click', () => startHost());
 $('btn-join').addEventListener('click', () => {
   const code = $('in-code').value.trim().toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) { msg('El código tiene 4 letras.'); return; }
@@ -166,8 +228,8 @@ $('btn-pause-settings').addEventListener('click', () => {
   else box.remove();
 });
 $('btn-rematch').addEventListener('click', () => {
-  if (mode === 'local' && game) { game.restart(); pendingEvents = []; }
-  else if (mode === 'online' && ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'restart' }));
+  if ((mode === 'local' || mode === 'host') && game) { game.restart(); pendingEvents = []; }
+  else if (mode === 'online' && ws) ws.sendControl({ type: 'restart' });
   show('endscreen', false); hudState.ended = false;
 });
 
@@ -291,14 +353,21 @@ function frame(now) {
   if (input.ballCamToggled() && !paused) { ballCam = !ballCam; renderer.setBallCam(ballCam); show('ballcam-ind', ballCam); }
   if (input.hitboxToggled() && !paused) { showHit = !showHit; renderer.setShowHitbox(showHit); }
 
-  if (mode === 'local' && game) {
-    if (!paused) {
+  if ((mode === 'local' || mode === 'host') && game) {
+    // El anfitrión no puede pausar: los demás siguen jugando.
+    if (!paused || mode === 'host') {
       acc += dt;
       let steps = 0;
       while (acc >= DT && steps < 12) {
-        game.setInput(0, input.read());
+        game.setInput(0, paused ? {} : input.read());
         game.step();
-        if (game.events.length) for (const e of game.events) pendingEvents.push(e);
+        if (game.events.length) for (const e of game.events) { pendingEvents.push(e); if (host) netEvents.push(e); }
+        if (host && ++tickCount % 3 === 0) {
+          const ns = game.serialize();
+          ns.events = netEvents;
+          netEvents = [];
+          host.broadcast({ type: 'state', s: ns });
+        }
         acc -= DT; steps++;
       }
       if (steps >= 12) acc = 0;
@@ -311,9 +380,9 @@ function frame(now) {
     updateHud(s, paused ? 0 : dt);
     renderer.render(s, myCarId, paused ? 0.0001 : dt);
   } else if (mode === 'online') {
-    if (ws && ws.readyState === 1 && now - lastSent >= 1000 / 60 - 1) {
+    if (ws && now - lastSent >= 1000 / 60 - 1) {
       lastSent = now;
-      ws.send(JSON.stringify({ type: 'input', i: paused ? { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, handbrake: false } : input.read() }));
+      ws.sendInput(paused ? { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, handbrake: false } : input.read());
     }
     const s = interpolated(dt);
     if (s) {

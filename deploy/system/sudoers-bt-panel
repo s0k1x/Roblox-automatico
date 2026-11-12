@@ -1,3 +1,0 @@
-# El panel solo puede lanzar las acciones de panel de bt-ctl
-Defaults:bt-panel !requiretty
-bt-panel ALL=(root) NOPASSWD: /usr/local/sbin/bt-ctl panel *

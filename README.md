@@ -1,28 +1,34 @@
 # Balón Turbo
 
-Fútbol con coches en 3D que se juega en el navegador. Un servidor Node sirve el juego y
-gestiona partidas online; también se puede jugar solo contra bots.
+Fútbol con coches en 3D que se juega en el navegador. **No necesita servidor de pago**: la web es
+estática (se aloja gratis) y todo se calcula en el PC de cada jugador.
 
-## Arrancar
+## Modos
+
+- **Contra bots**: 1v1, 2v2 o 3v3. Todo corre en tu navegador.
+- **Online de PC a PC**: «Crear sala online» convierte tu navegador en el anfitrión (calcula la física)
+  y te da un código de 4 letras. Tus amigos lo escriben en «Unirse» y se conectan directamente a tu PC
+  (WebRTC). Los huecos libres los ocupan bots.
+  - El anfitrión no debe cerrar ni minimizar la pestaña: si lo hace, la partida se para.
+  - Para encontrarse se usa el servicio gratuito de PeerJS (solo para el saludo inicial; el juego va
+    directo entre PCs). Se puede usar otro servidor propio con `?senal=https://host:puerto/`.
+  - En algunas redes muy cerradas (redes de empresa, algunos datos móviles) la conexión directa
+    puede fallar; en casa con wifi normal funciona.
+
+## Publicarlo gratis
+
+- **GitHub Pages** (automático): en GitHub, *Settings → Pages → Source: GitHub Actions*. Cada cambio
+  que llegue a la rama `main` se publica solo (`.github/workflows/pages.yml`) en
+  `https://<usuario>.github.io/<repositorio>/`.
+- **itch.io / Netlify Drop**: `npm install && npm run build` y sube el contenido de `dist/`
+  (en itch.io como juego HTML comprimido en ZIP; en Netlify arrastra la carpeta a app.netlify.com/drop).
+
+## Probarlo en tu PC
 
 ```bash
 npm install
 npm start          # http://localhost:3000
 ```
-
-Con Docker:
-
-```bash
-docker compose up -d --build
-```
-
-Variables: `PORT` (por defecto 3000).
-
-## Modos
-
-- **Contra bots**: 1v1, 2v2 o 3v3. La física corre en tu navegador.
-- **Online**: «Crear sala» da un código de 4 letras; tus amigos entran con «Unirse».
-  El servidor ejecuta la física (autoritativo) y los huecos libres los ocupan bots.
 
 ## Controles
 
@@ -66,8 +72,9 @@ Pruebas de la física: `npm test`.
 ## Estructura
 
 ```
-server.js          servidor HTTP + WebSocket (salas online)
-shared/            física, estadio, IA de bots (navegador y servidor)
-public/            cliente 3D (Three.js), menú, HUD, controles
+public/            cliente 3D (Three.js), menú, HUD, controles, red PC a PC (js/net.js)
+shared/            física, estadio, IA de bots
+scripts/build.mjs  genera la web estática en dist/
+server.js          servidor local para desarrollo (opcional)
 test/              pruebas de la simulación
 ```
