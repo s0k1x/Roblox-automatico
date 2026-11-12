@@ -45,11 +45,14 @@ function hitboxCenter(c) {
 
 export class Game {
   constructor(opts = {}) {
-    this.teamSize = clamp(opts.teamSize | 0 || 1, 1, 3);
+    this.freePlay = !!opts.freePlay;
+    this.infiniteBoost = !!opts.infiniteBoost;
+    this.botLevel = clamp(opts.botLevel ?? 1, 0, 2) | 0; // 0 novato, 1 profesional, 2 experto
+    this.teamSize = this.freePlay ? 1 : clamp(opts.teamSize | 0 || 1, 1, 3);
     this.duration = opts.duration || MATCH.DURATION;
     this.cars = [];
     let id = 0;
-    for (let team = 0; team < 2; team++) {
+    for (let team = 0; team < (this.freePlay ? 1 : 2); team++) {
       for (let k = 0; k < this.teamSize; k++) {
         const hb = HITBOXES[(id * 2 + team) % HITBOXES.length].id;
         this.cars.push(makeCar(id, team, `Bot ${id + 1}`, hb, true));
@@ -70,10 +73,11 @@ export class Game {
   }
 
   // ---------- Configuración ----------
-  setHuman(carId, name, hitboxId) {
+  setHuman(carId, name, hitboxId, paint) {
     const c = this.cars[carId];
     if (!c) return;
     c.isBot = false;
+    c.paint = sanitizePaint(paint);
     if (name) c.name = String(name).slice(0, 16);
     if (hitboxId) this.setHitbox(carId, hitboxId);
   }
@@ -81,6 +85,7 @@ export class Game {
     const c = this.cars[carId];
     if (!c) return;
     c.isBot = true;
+    c.paint = null;
     c.name = `Bot ${carId + 1}`;
     this.inputs.delete(carId);
   }
@@ -103,8 +108,28 @@ export class Game {
     this.resetKickoff();
   }
 
+  // Entrenamiento libre: devuelve el balón al centro (o delante del coche) sin tocar el marcador.
+  resetBall(inFront) {
+    const b = this.ball;
+    const c = this.cars[0];
+    if (inFront && c) {
+      const f = [c.o.f[0], c.o.f[1], 0];
+      const l = Math.hypot(f[0], f[1]) || 1;
+      b.pos = [c.pos[0] + (f[0] / l) * 600, c.pos[1] + (f[1] / l) * 600, P.BALL_REST_Z + 200];
+      b.pos[0] = clamp(b.pos[0], -ARENA.HX + 300, ARENA.HX - 300);
+      b.pos[1] = clamp(b.pos[1], -ARENA.HY + 300, ARENA.HY - 300);
+    } else b.pos = [0, 0, P.BALL_REST_Z];
+    b.vel = [0, 0, 0];
+    b.ang = [0, 0, 0];
+  }
+
   resetKickoff() {
-    this.phase = 'countdown';
+    if (this.freePlay && this.cars[0] && this.tick > 0) {
+      this.phase = 'play';
+      this.resetBall(false);
+      return;
+    }
+    this.phase = this.freePlay ? 'play' : 'countdown';
     this.phaseTime = MATCH.COUNTDOWN;
     this.kickoffTouched = false;
     this.lastTouch = null;
@@ -173,7 +198,7 @@ export class Game {
         } else this.resetKickoff();
       }
     } else if (this.phase === 'play') {
-      if (this.kickoffTouched) {
+      if (this.kickoffTouched && !this.freePlay) {
         if (this.overtime) this.clock += dt;
         else this.clock = Math.max(0, this.clock - dt);
       }
@@ -203,7 +228,9 @@ export class Game {
     if (this.phase === 'play') this.checkGoal();
 
     // Fin del tiempo: termina cuando el balón toca el suelo.
-    if (this.phase === 'play' && !this.overtime && this.clock <= 0) {
+    if (this.infiniteBoost) for (const c of this.cars) if (!c.isBot) c.boost = 100;
+
+    if (this.phase === 'play' && !this.freePlay && !this.overtime && this.clock <= 0) {
       if (this.ball.pos[2] <= P.BALL_RADIUS + 5) {
         if (this.score[0] === this.score[1]) {
           this.overtime = true;
@@ -596,14 +623,7 @@ export class Game {
       for (let k = i + 1; k < cars.length; k++) {
         const a = cars[i], b = cars[k];
         if (Math.abs(a.pos[0] - b.pos[0]) > 300 || Math.abs(a.pos[1] - b.pos[1]) > 300 || Math.abs(a.pos[2] - b.pos[2]) > 300) continue;
-        const sa = carSpheres(a), sb = carSpheres(b);
-        let best = null;
-        for (const pa of sa.c) for (const pb of sb.c) {
-          const d = sub(pb, pa);
-          const l = len(d);
-          const minD = sa.r + sb.r;
-          if (l < minD && (!best || minD - l > best.pen)) best = { pen: minD - l, n: norm(d, [1, 0, 0]) };
-        }
+        const best = obbContact(a, b);
         if (!best) continue;
         const n = best.n;
         a.pos = addS(a.pos, n, -best.pen / 2);
@@ -666,7 +686,7 @@ export class Game {
       speed: Math.round(len(b.vel) * 0.036), pos: b.pos.slice(),
     });
     this.phase = 'goal';
-    this.phaseTime = MATCH.GOAL_PAUSE;
+    this.phaseTime = this.freePlay ? 1.5 : MATCH.GOAL_PAUSE;
     if (this.overtime || (this.clock <= 0)) this.pendingEnd = true;
   }
 
@@ -685,10 +705,11 @@ export class Game {
       overtime: this.overtime,
       score: this.score.slice(),
       teamSize: this.teamSize,
+      freePlay: this.freePlay,
       lastTouch: this.lastTouch,
       ball: { p: vec(this.ball.pos), v: vec(this.ball.vel), f: dir(this.ball.o.f), u: dir(this.ball.o.u) },
       cars: this.cars.map((c) => ({
-        id: c.id, team: c.team, name: c.name, bot: c.isBot, hb: c.hb.id,
+        id: c.id, team: c.team, name: c.name, bot: c.isBot, hb: c.hb.id, paint: c.paint || null,
         p: vec(c.pos), v: vec(c.vel), f: dir(c.o.f), u: dir(c.o.u),
         boost: Math.round(c.boost), boosting: c.boosting, ss: c.supersonic,
         g: c.grounded, dead: c.dead, respawn: r(c.respawn),
@@ -700,9 +721,34 @@ export class Game {
   }
 }
 
-function carSpheres(c) {
-  const hc = hitboxCenter(c);
-  const r = c.half[1];
-  const off = Math.max(0, c.half[0] - r);
-  return { r, c: [addS(hc, c.o.f, off), addS(hc, c.o.f, -off)] };
+// Choque caja contra caja (hitboxes orientados) por ejes separadores (SAT).
+// Devuelve la normal (de a hacia b) y la penetración mínima, o null si no se tocan.
+function obbContact(a, b) {
+  const ca = hitboxCenter(a), cb = hitboxCenter(b);
+  const A = [a.o.f, a.o.l, a.o.u], B = [b.o.f, b.o.l, b.o.u];
+  const ha = a.half, hb = b.half;
+  const d = sub(cb, ca);
+  const axes = [...A, ...B];
+  for (const x of A) for (const y of B) {
+    const c = cross(x, y);
+    if (len(c) > 1e-4) axes.push(norm(c));
+  }
+  let best = null;
+  for (const ax of axes) {
+    const ra = ha[0] * Math.abs(dot(A[0], ax)) + ha[1] * Math.abs(dot(A[1], ax)) + ha[2] * Math.abs(dot(A[2], ax));
+    const rb = hb[0] * Math.abs(dot(B[0], ax)) + hb[1] * Math.abs(dot(B[1], ax)) + hb[2] * Math.abs(dot(B[2], ax));
+    const dist = dot(d, ax);
+    const pen = ra + rb - Math.abs(dist);
+    if (pen <= 0) return null;
+    if (!best || pen < best.pen) best = { pen, n: dist >= 0 ? ax : scale(ax, -1) };
+  }
+  return best;
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+function sanitizePaint(p) {
+  if (!p || typeof p !== 'object') return null;
+  const out = {};
+  for (const k of ['a', 'b', 'w', 't']) if (typeof p[k] === 'string' && HEX.test(p[k])) out[k] = p[k].toLowerCase();
+  return Object.keys(out).length ? out : null;
 }

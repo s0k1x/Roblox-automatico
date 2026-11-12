@@ -11,7 +11,20 @@ function predictBall(b, t) {
   return [lim(b.pos[0] + b.vel[0] * t, ARENA.HX - 150), lim(b.pos[1] + b.vel[1] * t, ARENA.HY + 200), z];
 }
 
+// Dificultad: los bots más fáciles reaccionan cada varios ticks y no hacen jugadas aéreas.
+const REACTION_TICKS = [14, 5, 1];
 export function botInput(game, c) {
+  const level = game.botLevel ?? 1;
+  c.aiCache = c.aiCache || { left: 0, inp: null };
+  if (c.aiCache.inp && c.aiCache.left > 0 && c.grounded) { c.aiCache.left--; return c.aiCache.inp; }
+  const inp = think(game, c, level);
+  if (level === 0) { inp.boost = inp.boost && c.boost > 50; if (c.ai && c.ai.state === 'aerial') c.ai.state = 'air'; }
+  c.aiCache.inp = inp;
+  c.aiCache.left = REACTION_TICKS[level] - 1;
+  return inp;
+}
+
+function think(game, c, level) {
   const inp = { throttle: 1, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, handbrake: false };
   const b = game.ball;
   const ownY = c.team === 0 ? -ARENA.HY : ARENA.HY;
@@ -86,7 +99,7 @@ export function botInput(game, c) {
         inp.jump = true; ai.state = 'jump1';
       } else if (horiz < 350 && b.pos[2] > 220 && b.pos[2] < 480) {
         inp.jump = true; ai.state = 'jump1';
-      } else if (horiz < 900 && b.pos[2] > 600 && b.pos[2] < 1600 && c.boost > 40 && Math.abs(b.vel[2]) < 400) {
+      } else if (level > 0 && horiz < 900 && b.pos[2] > 600 && b.pos[2] < 1600 && c.boost > 40 && Math.abs(b.vel[2]) < 400) {
         inp.jump = true; ai.state = 'aerial';
       }
     }

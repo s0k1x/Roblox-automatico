@@ -58,4 +58,25 @@ const finite = g.cars.every((c) => c.pos.every(Number.isFinite)) && g.ball.pos.e
 ok(finite, 'partido 3v3 de 60 s estable');
 ok(g.cars.every((c) => wallDist(...c.pos) > -50), 'ningún coche atraviesa paredes');
 console.log('Marcador tras 60 s de bots:', g.score, 'toques', g.cars.map((c) => c.touches));
+// Choque entre coches con caja real: dos coches de frente se separan y no se atraviesan
+g = new Game({ teamSize: 1 }); for (const c of g.cars) g.setHuman(c.id);
+g.phase = 'play'; g.kickoffTouched = true; g.ball.pos = [3000, 3000, 93];
+const ca = g.cars[0], cb = g.cars[1];
+g.placeCar(ca, [0, -300], Math.PI / 2); g.placeCar(cb, [0, 300], -Math.PI / 2);
+ca.vel = [0, 1200, 0]; cb.vel = [0, -1200, 0];
+let minGap = 1e9;
+run(g, 1, () => { g.setInput(0, { throttle: 1 }); g.setInput(1, { throttle: 1 }); minGap = Math.min(minGap, cb.pos[1] - ca.pos[1]); });
+ok(minGap > 100 && !ca.dead && !cb.dead, `coches de frente no se atraviesan (separación mínima ${minGap.toFixed(0)})`);
+
+// Entrenamiento libre: un solo coche, sin cuenta atrás, el gol recoloca el balón
+g = new Game({ freePlay: true, infiniteBoost: true }); g.setHuman(0, 'Yo');
+ok(g.cars.length === 1 && g.phase === 'play', 'entrenamiento libre: 1 coche y sin cuenta atrás');
+g.ball.pos = [0, 4900, 93]; g.ball.vel = [0, 2000, 0];
+g.cars[0].boost = 10; run(g, 2.5, () => g.setInput(0, {}));
+ok(g.score[0] === 1 && g.phase === 'play' && Math.hypot(g.ball.pos[0], g.ball.pos[1]) < 50 && g.cars[0].boost === 100, 'entrenamiento: gol, balón al centro y turbo infinito');
+
+// Dificultad: los bots novatos también juegan sin romperse
+g = new Game({ teamSize: 2, botLevel: 0 }); run(g, 20);
+ok(g.cars.every((c) => c.pos.every(Number.isFinite)), 'bots novatos estables');
+
 process.exit(fails ? 1 : 0);
