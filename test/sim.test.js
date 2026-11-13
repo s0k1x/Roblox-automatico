@@ -119,7 +119,9 @@ for (const [name, start, yaw] of [['pared', [2500, 0], 0], ['diagonal', [2400, 3
 // Predicción: exportar/importar el estado de un coche y repetir entradas da el mismo resultado
 {
   const A = new Game({ teamSize: 1 }); for (const c of A.cars) A.setHuman(c.id);
-  A.phase = 'play'; A.ball.pos = [3000, 3000, 93];
+  A.phase = 'play'; A.ball.pos = [3500, 4500, 93];
+  A.placeCar(A.cars[0], [0, -2500], Math.PI / 2); A.placeCar(A.cars[1], [-3500, 4500], 0); // sin choques
+  for (const pad of A.pads) pad.timer = 1e9; // sin recoger turbo (la predicción no simula los turbos del campo)
   const seq = (i) => ({ throttle: 1, steer: Math.sin(i / 20), jump: i % 70 < 8 || (i % 70 > 14 && i % 70 < 17), pitch: i % 70 > 13 ? -1 : 0, boost: i % 50 < 25 });
   for (let i = 0; i < 200; i++) { A.setInput(0, seq(i)); A.step(); }
   const snap = A.serialize(true).cars[0].x;
@@ -189,5 +191,47 @@ for (const [name, start, yaw] of [['pared', [2500, 0], 0], ['diagonal', [2400, 3
   G.setInput(0, {}); G.step();
   ok(Math.abs(c.vel[1]) < 1e-6, 'frenada total por debajo de 25 uu/s sin acelerador');
 }
+
+// ---------- Mecánicas avanzadas ----------
+const mkM = () => { const G = new Game({ teamSize: 1 }); for (const c of G.cars) G.setHuman(c.id); G.phase = 'play'; G.kickoffTouched = true; G.ball.pos = [3500, 4000, 93]; return G; };
+// Roll libre: derrape (Mayús) + girar en el aire → giro sobre el eje del coche al máximo (5.5 rad/s)
+{ const G = mkM(), c = G.cars[0]; G.placeCar(c, [0, -2000], Math.PI / 2);
+  for (let i = 0; i < 60; i++) { G.setInput(0, { jump: i < 24, handbrake: i > 6, steer: i > 6 ? 1 : 0 }); G.step(); }
+  const r = c.ang[0] * c.o.f[0] + c.ang[1] * c.o.f[1] + c.ang[2] * c.o.f[2];
+  ok(r > 5, `roll libre con derrape + girar: ${r.toFixed(2)} rad/s`); }
+// Reinicio de flip: con el flip gastado, tocar el balón con las ruedas lo devuelve
+{ const G = mkM(), c = G.cars[0]; G.placeCar(c, [0, -2000], Math.PI / 2);
+  c.pos = [0, -2000, 800]; c.grounded = false; c.canFlip = false; c.hasJumped = true; c.flipTimer = 5;
+  c.o = { f: [0, 1, 0], l: [1, 0, 0], u: [0, 0, -1] };
+  G.ball.pos = [0, -1990, 878]; G.ball.vel = [0, 0, -200];
+  for (let i = 0; i < 6; i++) { G.setInput(0, {}); G.step(); }
+  ok(c.canFlip && c.flipReset, 'reinicio de flip al tocar el balón con las ruedas'); }
+// Techo: apoyar las ruedas en el techo devuelve el salto
+{ const G = mkM(), c = G.cars[0]; G.placeCar(c, [0, -2000], Math.PI / 2);
+  c.pos = [0, -2000, 2019]; c.vel = [0, 800, 300]; c.grounded = false; c.hasJumped = true; c.canFlip = false;
+  c.o = { f: [0, 1, 0], l: [1, 0, 0], u: [0, 0, -1] };
+  let got = false; for (let i = 0; i < 20; i++) { G.setInput(0, {}); G.step(); if (c.grounded && !c.hasJumped) got = true; }
+  ok(got, 'techo: con las ruedas en el techo se recupera el salto'); }
+// Wavedash: flip hacia delante justo antes de tocar el suelo → más velocidad
+{ const G = mkM(), c = G.cars[0]; G.placeCar(c, [0, -3000], Math.PI / 2); c.vel = [0, 1000, 0];
+  let flipped = -1;
+  for (let i = 0; i < 160; i++) {
+    const doFlip = flipped < 0 && !c.grounded && c.vel[2] < 0 && c.pos[2] < 35;
+    if (doFlip) flipped = i;
+    G.setInput(0, { jump: i < 3 || doFlip || (flipped >= 0 && i - flipped < 3), pitch: i > 3 && i < 14 ? 1 : flipped >= 0 ? -1 : 0 });
+    G.step();
+  }
+  ok(c.grounded && c.vel[1] > 1150, `wavedash: de 1000 a ${c.vel[1].toFixed(0)} uu/s y en el suelo`); }
+// Medio flip: flip atrás + cancelar + medio roll → mirando al revés y sobre las ruedas
+{ const G = mkM(), c = G.cars[0]; G.placeCar(c, [0, 0], Math.PI / 2); c.vel = [0, -500, 0];
+  for (let i = 0; i < 200; i++) {
+    const t = i / 120; const inp = { throttle: 1 };
+    if (t < 0.05) inp.jump = true;
+    else if (t >= 0.1 && t < 0.12) { inp.jump = true; inp.pitch = 1; }
+    else if (t >= 0.12 && t < 1.2 && (c.hfCancel || c.o.f[1] < -0.5)) { c.hfCancel = true; inp.pitch = -1; if (c.o.u[2] < 0.6) inp.roll = 1; }
+    G.setInput(0, inp); G.step();
+  }
+  const yaw = Math.atan2(c.o.f[1], c.o.f[0]) * 180 / Math.PI;
+  ok(Math.abs(yaw + 90) < 25 && c.o.u[2] > 0.8, `medio flip: orientación ${yaw.toFixed(0)}° (de 90° a -90°) y ruedas abajo (${c.o.u[2].toFixed(2)})`); }
 
 process.exit(fails ? 1 : 0);

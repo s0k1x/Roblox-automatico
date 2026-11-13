@@ -393,7 +393,7 @@ export class Game {
         pitchIn = 0;
         if (c.dodge.t >= P.FLIP_PITCHLOCK_TIME) c.dodge = null;
       }
-      if (c.dodge) {
+      if (c.dodge && c.dodge.t < P.DODGE_TIME) {
         c.dodge.t += dt;
         // Durante el flip se frena la velocidad vertical (cae menos y sube menos)
         if (c.dodge.t >= P.FLIP_Z_DAMP_START && (c.vel[2] < 0 || c.dodge.t < P.FLIP_Z_DAMP_END)) {
@@ -401,12 +401,14 @@ export class Game {
         }
         const d = c.dodge;
         // Cancelación del flip: tirar del stick en sentido contrario anula el giro de cabeceo.
-        const cancel = d.pitch !== 0 && Math.sign(pitchIn) === Math.sign(d.pitch) && Math.abs(pitchIn) > 0.5;
-        const targetPitchW = cancel ? 0 : P.CAR_MAX_ANG * d.pitch;
-        const targetRollW = P.CAR_MAX_ANG * d.roll;
+        // Proporcional: cuanto más se tira en sentido contrario al flip, más se anula su giro.
+        const cancelAmt = d.pitch !== 0 && Math.sign(pitchIn) === Math.sign(d.pitch) ? Math.abs(pitchIn) : 0;
+        const targetPitchW = P.CAR_MAX_ANG * d.pitch * (1 - cancelAmt);
         const k = Math.min(1, 20 * dt);
         wl[1] += (targetPitchW - wl[1]) * k;
-        wl[0] += (targetRollW - wl[0]) * k;
+        // Durante el flip solo se bloquea el cabeceo: el roll sigue respondiendo (medio flip, etc.)
+        if (d.roll !== 0) wl[0] += (P.CAR_MAX_ANG * d.roll - wl[0]) * k;
+        else alpha[0] = P.AIR_TORQUE_ROLL * rollIn - P.AIR_DAMP_ROLL * wl[0];
         alpha[2] = -P.AIR_TORQUE_YAW * yawIn - P.AIR_DAMP_YAW * wl[2] * (1 - Math.abs(yawIn));
       } else {
         alpha[0] = P.AIR_TORQUE_ROLL * rollIn - P.AIR_DAMP_ROLL * wl[0];
@@ -747,6 +749,7 @@ export class Game {
       fr: c.flipReset ? 1 : 0, pj: c.prevJump ? 1 : 0, ss: c.supersonic ? 1 : 0, sst: r(c.ssTime || 0),
       d: c.dodge ? [r(c.dodge.t), r(c.dodge.pitch), r(c.dodge.roll)] : null,
       dead: c.dead ? 1 : 0,
+      hb: r(c.hbVal || 0), af: c.autoflip ? [r(c.autoflip.t), ...v3(c.autoflip.n)] : null,
     };
   }
 
@@ -760,6 +763,8 @@ export class Game {
     c.flipReset = !!x.fr; c.prevJump = !!x.pj; c.supersonic = !!x.ss; c.ssTime = x.sst;
     c.dodge = x.d ? { t: x.d[0], pitch: x.d[1], roll: x.d[2] } : null;
     c.dead = !!x.dead;
+    c.hbVal = x.hb || 0;
+    c.autoflip = x.af ? { t: x.af[0], n: x.af.slice(1, 4) } : null;
   }
 
   serialize(full = false) {

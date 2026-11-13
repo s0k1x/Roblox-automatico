@@ -28,7 +28,7 @@ const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', ...CAM_PRESETS.def
   camPreset: 'default', shake: true, swivel: 5, transition: 1, invertLook: false,
   rumble: true, showNames: true, stickSens: 100,
   botLevel: 1, map: 'clasico', infBoost: false, quality: 'alta', fpsLimit: 0, showFps: false,
-  showSpeed: true, showScore: true, uiScale: 100,
+  showSpeed: true, showScore: true, uiScale: 100, scheme: 'default', camMode: 'toggle',
   volMaster: 80, volSfx: 80, volEngine: 60, volMusic: 50,
   challenges: { week: '', prog: {} },
   paint: { a: '#2fd6b5', b: '#14213d', w: '#d9e2f2', t: '#ffb347' },
@@ -61,6 +61,10 @@ const SCHEMA = {
     ['check', 'invertLook', 'Invertir giro'],
     ['check', 'ballcamDefault', 'Cámara balón por defecto'],
   ],
+  ctl: [
+    ['seg', 'scheme', 'Esquema de controles', [['default', 'Predeterminado'], ['keys', 'Solo teclado']]],
+    ['seg', 'camMode', 'Cámara balón', [['toggle', 'Alternar'], ['hold', 'Mantener']]],
+  ],
   ui: [
     ['check', 'showSpeed', 'Mostrar velocímetro'],
     ['check', 'showScore', 'Mostrar marcador'],
@@ -85,6 +89,8 @@ for (const items of Object.values(SCHEMA)) for (const it of items) {
   else if (it[0] === 'check') cfg[it[1]] = !!cfg[it[1]];
 }
 if (![30, 60].includes(cfg.fpsLimit)) cfg.fpsLimit = 0;
+if (cfg.scheme !== 'keys') cfg.scheme = 'default';
+if (cfg.camMode !== 'hold') cfg.camMode = 'toggle';
 if (cfg.quality !== 'baja') cfg.quality = 'alta';
 if (!MAPS.some((m) => m.id === cfg.map)) cfg.map = 'clasico';
 if (!['default', 'close', 'far', 'custom'].includes(cfg.camPreset) ||
@@ -105,6 +111,7 @@ function applyUI() {
   $('fps').classList.toggle('hidden', !cfg.showFps);
 }
 function applyAll() {
+  input.setScheme(cfg.scheme, cfg.camMode);
   applyCam(); applyAudio(); applyUI();
   R('setQuality', cfg.quality);
   R('setMap', cfg.map);
@@ -168,6 +175,47 @@ function buildTab(box, tab, withReset) {
 }
 function buildSettings(box) { buildTab(box, 'cam', true); }
 for (const t of ['play', 'cam', 'ui', 'vid', 'aud']) buildTab($('st-' + t), t, true);
+buildTab($('st-ctl-opts'), 'ctl', true);
+
+// Tabla de controles según el esquema elegido
+function renderCtlTables() {
+  const kb = cfg.scheme === 'keys' ? [
+    ['W / S', 'Acelerar / frenar · morro abajo / arriba'],
+    ['A / D', 'Girar · guiñada'],
+    ['Q / E', 'Giro en el aire izquierda / derecha'],
+    ['Espacio', 'Salto (doble pulsación: voltereta)'],
+    ['K / Mayús dcha.', 'Turbo'],
+    ['Mayús izq. / Ctrl', 'Derrape · giro libre en el aire'],
+    ['R', 'Cámara balón'],
+  ] : [
+    ['W / S', 'Acelerar / frenar · morro abajo / arriba'],
+    ['A / D', 'Girar · guiñada'],
+    ['Clic derecho', 'Salto (doble pulsación: voltereta)'],
+    ['Clic izquierdo', 'Turbo'],
+    ['Mayús izq.', 'Derrape · giro libre en el aire (con A / D)'],
+    ['Q / E', 'Giro en el aire izquierda / derecha'],
+    ['Espacio', 'Cámara balón'],
+  ];
+  kb.push(['Tab (mantener)', 'Ver marcador de la partida'], ['1 – 4', 'Chat rápido: grupo y después frase'],
+    ['Botón central + ratón', 'Mirar alrededor'], ['Alt + ↑ ↓ ← →', 'Mirar alrededor con el teclado'],
+    ['H', 'Ver hitbox'], ['T / G', 'Entrenamiento: balón delante / al centro'], ['Esc', 'Pausa']);
+  const pad = [
+    ['RT / LT', 'Acelerar / frenar y marcha atrás'],
+    ['Stick izquierdo', 'Girar, guiñada y morro arriba / abajo'],
+    ['Stick derecho', 'Mirar alrededor'],
+    ['A / B / X', 'Salto / turbo / derrape y giro libre'],
+    ['Y', 'Cámara balón'],
+    ['LB / RB', 'Giro en el aire izquierda / derecha'],
+    ['Vista (mantener)', 'Marcador · en entrenamiento, balón delante'],
+    ['Cruceta', 'Chat rápido'],
+    ['Start', 'Pausa'],
+  ];
+  const tbl = (rows) => '<table class="controls">' + rows.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('') + '</table>';
+  const hold = cfg.camMode === 'hold' ? '<p class="note">La cámara balón solo está activa mientras mantienes pulsado su botón.</p>' : '';
+  $('ctl-tables').innerHTML = '<div class="lbl">Teclado y ratón</div>' + tbl(kb) + '<div class="lbl">Mando</div>' + tbl(pad) + hold;
+}
+renderCtlTables();
+{ const f = renderCtlTables; f.box = $('ctl-tables'); refreshers.add(f); }
 $('btn-set-default').addEventListener('click', () => { for (const t of Object.keys(SCHEMA)) resetKeys(t); });
 
 const playerName = () => (cfg.name.trim() || 'Piloto').slice(0, 16);
@@ -453,6 +501,7 @@ let lastSent = 0;
 let latest = null;
 let hudState = { ended: false, goFlash: 0, banner: 0 };
 let ballCam = false;
+let padSt9 = true, camHeldPrev = false;
 let showHit = false;
 
 function show(id, v) { $(id).classList.toggle('hidden', !v); }
@@ -579,6 +628,7 @@ function enterGame(m) {
   hudState = { ended: false, goFlash: 0, banner: 0 };
   $('banner').classList.remove('show'); $('sub-banner').textContent = '';
   input.reset();
+  closeChatMenu(); chatSpam.clear(); $('chat-log').innerHTML = ''; camHeldPrev = false;
 }
 
 function toMenu(message) {
@@ -643,6 +693,7 @@ async function startHost() {
         }
       },
       onControl(peerId, m) {
+        if (m.type === 'chat') { const cid = hostHumans.get(peerId); if (cid !== undefined) emitChat(cid, m.k); return; }
         if (m.type === 'restart' && game && game.phase === 'ended') { game.restart(); show('endscreen', false); hudState.ended = false; }
       },
       onLeave(peerId) {
@@ -687,6 +738,8 @@ async function startOnline(code) {
           snaps.push(s);
           if (snaps.length > 80) snaps.shift();
           if (s.events && s.events.length) onEvents(s.events, s);
+        } else if (m.type === 'chat') {
+          if (Number.isInteger(m.car) && Number.isInteger(m.k) && m.k >= 0 && m.k < 16) addChat(m.car, m.k);
         } else if (m.type === 'error') msg(m.message || '');
       },
       onClose() { if (mode === 'online') toMenu('El anfitrión ha cerrado la sala o se ha perdido la conexión.'); },
@@ -724,6 +777,7 @@ $('btn-rematch').addEventListener('click', () => {
 function setPause(v) {
   if (mode === 'menu') return;
   paused = v;
+  if (v) closeChatMenu();
   show('pause', v);
   applyAudio();
   if (!v) { const b = $('settings2'); if (b) b.remove(); input.reset(); }
@@ -759,10 +813,13 @@ function handleHudEvents(events, s) {
     } else if (e.type === 'goal') {
       const who = e.scorer !== null && e.scorer !== undefined ? carName(s, e.scorer) : '';
       banner('¡GOL!', `${who ? who + ' · ' : ''}${e.own ? 'en propia puerta · ' : ''}${e.speed} km/h`, TEAM_COLORS[e.team], 3, 3);
+      if (!e.own) botChat(e.team, 4, 0.25);
     } else if (e.type === 'demo') {
       banner('DEMOLICIÓN', `${carName(s, e.attacker)} ➜ ${carName(s, e.victim)}`, '#ff5a5a', 1.6, 1);
     } else if (e.type === 'save') {
       banner('¡PARADA!', carName(s, e.car), '#39f3c8', 1.6, 1);
+      const sc = s.cars.find((x) => x.id === e.car);
+      if (sc) botChat(sc.team, 6, 0.3);
     } else if (e.type === 'overtime') {
       banner('PRÓRROGA', 'El próximo gol gana', '#ffd24a', 2.8, 2);
     } else if (e.type === 'go') {
@@ -770,7 +827,89 @@ function handleHudEvents(events, s) {
     }
   }
 }
+
+// ---------- chat rápido y marcador ----------
+const CHAT_GROUPS = [
+  { name: 'Información', l: ['¡Lo tengo!', '¡Toda tuya!', '¡Necesito turbo!', '¡Defiendo!'] },
+  { name: 'Elogios', l: ['¡Buen tiro!', '¡Buen pase!', '¡Paradón!', '¡Gracias!'] },
+  { name: 'Reacciones', l: ['¡Uf!', '¡Casi!', '¡Increíble!', '¡Vaya!'] },
+  { name: 'Disculpas', l: ['¡Perdón!', '¡Ups!', '¡Culpa mía!', '¡No pasa nada!'] },
+];
+const CHAT_TEXT = CHAT_GROUPS.flatMap((g) => g.l);
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const curCars = () => (game && (mode === 'local' || mode === 'host') ? game.cars : latest ? latest.cars : []);
+let chatGroup = -1, chatMenuT = 0;
+const chatSpam = new Map(); // coche -> { last, times, block }
+// Anti-spam: 1 mensaje cada 0,6 s; 4 en 3 s y luego 4 s de espera
+function chatAllowed(car) {
+  const now = performance.now();
+  let r = chatSpam.get(car);
+  if (!r) { r = { last: -1e9, times: [], block: 0 }; chatSpam.set(car, r); }
+  if (now < r.block || now - r.last < 600) return false;
+  r.times = r.times.filter((t) => now - t < 3000);
+  if (r.times.length >= 4) { r.block = now + 4000; r.times = []; return false; }
+  r.times.push(now); r.last = now;
+  return true;
+}
+function addChat(car, k) {
+  const c = curCars().find((x) => x.id === car);
+  if (!c || !(k >= 0 && k < 16)) return;
+  const d = document.createElement('div');
+  d.className = 'msg';
+  d.style.borderLeftColor = TEAM_COLORS[c.team];
+  d.innerHTML = `<b style="color:${TEAM_COLORS[c.team]}">${esc(c.name)}</b>${esc(CHAT_TEXT[k])}`;
+  const log = $('chat-log');
+  log.appendChild(d);
+  while (log.children.length > 6) log.firstChild.remove();
+  setTimeout(() => d.remove(), 6000);
+}
+// Anfitrión o local: acepta, muestra y reenvía un mensaje de un coche (humano o bot)
+function emitChat(car, k) {
+  if (!Number.isInteger(k) || k < 0 || k > 15 || !chatAllowed(car)) return;
+  addChat(car, k);
+  if (host) host.broadcastControl({ type: 'chat', car, k });
+}
+function sendMyChat(k) {
+  if (mode === 'online') { if (ws && chatAllowed(-1)) ws.sendControl({ type: 'chat', k }); }
+  else emitChat(myCarId, k);
+}
+function closeChatMenu() { chatGroup = -1; chatMenuT = 0; show('chat-menu', false); }
+function chatKey(i) {
+  if (chatGroup < 0) {
+    chatGroup = i; chatMenuT = 4;
+    const g = CHAT_GROUPS[i];
+    $('chat-menu').innerHTML = `<h4>${g.name}</h4>` + g.l.map((t, j) => `<div><kbd>${j + 1}</kbd>${esc(t)}</div>`).join('');
+    show('chat-menu', true);
+  } else { const k = chatGroup * 4 + i; closeChatMenu(); sendMyChat(k); }
+}
+// Los bots a veces felicitan tras un gol o una parada de su equipo
+function botChat(team, k, prob) {
+  if (!(mode === 'local' || mode === 'host') || training || Math.random() > prob) return;
+  const bots = curCars().filter((c) => c.bot !== undefined ? c.bot : c.isBot).filter((c) => c.team === team);
+  if (!bots.length) return;
+  const b = bots[Math.floor(Math.random() * bots.length)];
+  setTimeout(() => { if (mode !== 'menu') emitChat(b.id, k); }, 600 + Math.random() * 900);
+}
+
+let tabHtml = '';
+function renderTabBoard(s) {
+  const pts = (st) => 100 * st[0] + 50 * st[1] + 20 * st[2] + 25 * st[3];
+  let h = `<div class="tb-head"><span class="b">${s.score[0]}</span><small>${fmt(s.clock)}${s.overtime ? ' · prórroga' : ''}</small><span class="o">${s.score[1]}</span></div>`;
+  for (const team of [0, 1]) {
+    const rows = s.cars.filter((c) => c.team === team).sort((a, b) => pts(b.st) - pts(a.st));
+    h += `<table class="${team ? 'tm-o' : 'tm-b'}"><caption>${TEAM_NAMES[team]}</caption><thead><tr><th>Jugador</th><th>Puntos</th><th>Goles</th><th>Paradas</th><th>Tiros</th><th>Demos</th></tr></thead><tbody>`;
+    for (const c of rows) {
+      h += `<tr${c.id === myCarId ? ' class="me"' : ''}><td>${esc(c.name)}${c.bot ? ' (Bot)' : ''}</td><td class="pts">${pts(c.st)}</td><td>${c.st[0]}</td><td>${c.st[1]}</td><td>${c.st[2]}</td><td>${c.st[3]}</td></tr>`;
+    }
+    h += '</tbody></table>';
+  }
+  if (h !== tabHtml) { tabHtml = h; $('tab-board').innerHTML = h; }
+}
 function updateHud(s, dt) {
+  const showTab = !training && input.scoreboardHeld();
+  show('tab-board', showTab);
+  if (showTab) renderTabBoard(s);
+  if (chatMenuT > 0 && (chatMenuT -= dt) <= 0) closeChatMenu();
   $('sc-blue').textContent = s.score[0];
   $('sc-orange').textContent = s.score[1];
   const ck = $('clock');
@@ -935,7 +1074,17 @@ function frame(now) {
   if (sel && !selPrev) trainBall(true);
   selPrev = sel;
 
-  if (input.ballCamToggled() && !paused) { ballCam = !ballCam; renderer.setBallCam(ballCam); show('ballcam-ind', ballCam); }
+  const st9 = !!(gp && gp.buttons[9] && gp.buttons[9].pressed);
+  if (st9 && !padSt9) setPause(!paused);
+  padSt9 = st9;
+
+  const setCam = (v) => { ballCam = v; renderer.setBallCam(ballCam); show('ballcam-ind', ballCam); };
+  if (cfg.camMode === 'hold') {
+    const h = input.ballCamHeld() && !paused;
+    if (h !== camHeldPrev) { camHeldPrev = h; setCam(h ? !cfg.ballcamDefault : !!cfg.ballcamDefault); }
+  }
+  if (input.ballCamToggled() && !paused) setCam(!ballCam);
+  if (!paused) { const q = input.quickChat(); if (q >= 0) chatKey(q); }
   if (input.hitboxToggled() && !paused) { showHit = !showHit; renderer.setShowHitbox(showHit); }
 
   if ((mode === 'local' || mode === 'host') && game) {

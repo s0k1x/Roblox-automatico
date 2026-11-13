@@ -42,6 +42,9 @@
   <div id="room-code" class="hidden"></div>
   <div id="train-info" class="hidden"><b>Entrenamiento</b> · Goles <span id="train-goals">0</span><small><kbd>T</kbd> balón delante · <kbd>G</kbd> balón al centro</small></div>
   <div id="ballcam-ind" class="hidden">Cámara balón</div>
+  <div id="chat-log"></div>
+  <div id="chat-menu" class="hidden"></div>
+  <div id="tab-board" class="hidden"></div>
   <div id="countdown"></div>
   <div id="banner"></div>
   <div id="sub-banner"></div>
@@ -170,31 +173,8 @@
         <div class="spanel" id="st-play"></div>
         <div class="spanel hidden" id="st-cam"></div>
         <div class="spanel hidden" id="st-ctl">
-          <div class="lbl">Teclado y ratón</div>
-          <table class="controls">
-            <tr><td>W / S</td><td>Acelerar / frenar · morro abajo / arriba</td></tr>
-            <tr><td>A / D</td><td>Girar · guiñada</td></tr>
-            <tr><td>Q / E</td><td>Alabeo en el aire</td></tr>
-            <tr><td>Espacio / clic dcho.</td><td>Salto (doble pulsación: voltereta)</td></tr>
-            <tr><td>Mayús / clic izq.</td><td>Turbo</td></tr>
-            <tr><td>Ctrl / C</td><td>Derrape · giro libre</td></tr>
-            <tr><td>Botón central + ratón</td><td>Mirar alrededor</td></tr>
-            <tr><td>Alt + ↑ ↓ ← →</td><td>Mirar alrededor con el teclado</td></tr>
-            <tr><td>R</td><td>Cámara balón</td></tr>
-            <tr><td>H</td><td>Ver hitbox</td></tr>
-            <tr><td>T / G</td><td>Entrenamiento: balón delante / al centro</td></tr>
-            <tr><td>Esc</td><td>Pausa</td></tr>
-          </table>
-          <div class="lbl">Mando</div>
-          <table class="controls">
-            <tr><td>RT / LT</td><td>Acelerar / frenar</td></tr>
-            <tr><td>Stick izquierdo</td><td>Girar y morro arriba / abajo</td></tr>
-            <tr><td>Stick derecho</td><td>Mirar alrededor</td></tr>
-            <tr><td>A / B / X</td><td>Salto / turbo / derrape</td></tr>
-            <tr><td>Y</td><td>Cámara balón</td></tr>
-            <tr><td>LB / RB</td><td>Alabeo en el aire</td></tr>
-            <tr><td>Select</td><td>Entrenamiento: balón delante</td></tr>
-          </table>
+          <div id="st-ctl-opts"></div>
+          <div id="ctl-tables"></div>
         </div>
         <div class="spanel hidden" id="st-ui"></div>
         <div class="spanel hidden" id="st-vid"></div>

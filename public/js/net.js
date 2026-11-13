@@ -69,6 +69,10 @@ export function hostRoom(handlers, tries = 3) {
           const p = peers.get(id);
           if (p && p.ctl && p.ctl.open) p.ctl.send(obj);
         },
+        // Mensaje por el canal fiable a todos los invitados (p. ej. chat rápido)
+        broadcastControl(obj) {
+          for (const p of peers.values()) if (p.joined && p.ctl && p.ctl.open) p.ctl.send(obj);
+        },
         kick(id) {
           const p = peers.get(id);
           if (p) { try { p.ctl && p.ctl.close(); p.rt && p.rt.close(); } catch (e) { /* nada */ } }

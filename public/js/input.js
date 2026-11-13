@@ -8,17 +8,26 @@ export function createInput() {
   let camFlag = false;
   let hitFlag = false;
   let padCam = false;
+  // Esquema de controles: 'default' (teclado + ratón) o 'keys' (solo teclado). Cámara balón: 'toggle' o 'hold'.
+  let scheme = 'default';
+  let camMode = 'toggle';
+  const chatQ = []; // chat rápido pendiente (índices 0-3)
+  const padPrev = {};
 
   const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'Space', 'ShiftLeft', 'ShiftRight',
-    'ControlLeft', 'ControlRight', 'KeyC', 'KeyR', 'KeyH', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+    'ControlLeft', 'ControlRight', 'KeyC', 'KeyR', 'KeyH', 'KeyK', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
+  const camKey = () => (scheme === 'keys' ? 'KeyR' : 'Space');
   window.addEventListener('keydown', (e) => {
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-    if (GAME_KEYS.has(e.code)) e.preventDefault();
+    const inGame = !!document.getElementById('hud') && !document.getElementById('hud').classList.contains('hidden');
+    if (GAME_KEYS.has(e.code) || (e.code === 'Tab' && inGame)) e.preventDefault();
     if (!e.repeat) {
-      if (e.code === 'KeyR') camFlag = true;
+      if (e.code === camKey()) camFlag = true;
       if (e.code === 'KeyH') hitFlag = true;
+      const d = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
+      if (d && inGame && chatQ.length < 4) chatQ.push(+d[1] - 1);
     }
     keys.add(e.code);
   });
@@ -53,9 +62,16 @@ export function createInput() {
     let steer = (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0);
     let yaw = steer;
     let roll = (k('KeyE') ? 1 : 0) - (k('KeyQ') ? 1 : 0);
-    let jump = k('Space') || mouse.right;
-    let boost = k('ShiftLeft') || k('ShiftRight') || mouse.left;
-    let handbrake = k('ControlLeft') || k('ControlRight') || k('KeyC');
+    let jump, boost, handbrake;
+    if (scheme === 'keys') {
+      jump = k('Space');
+      boost = k('KeyK') || k('ShiftRight');
+      handbrake = k('ShiftLeft') || k('ControlLeft') || k('ControlRight');
+    } else {
+      jump = mouse.right;
+      boost = mouse.left;
+      handbrake = k('ShiftLeft');
+    }
 
     const p = pad();
     if (p) {
@@ -88,10 +104,38 @@ export function createInput() {
     };
   }
 
+  // Flanco de subida de un botón del mando
+  function padEdge(p, i) {
+    const on = !!(p && p.buttons[i] && p.buttons[i].pressed);
+    const f = on && !padPrev[i];
+    padPrev[i] = on;
+    return f;
+  }
+  const padHeld = (i) => { const p = pad(); return !!(p && p.buttons[i] && p.buttons[i].pressed); };
+
   return {
     read,
-    ballCamToggled() { const f = camFlag || touch.camToggled(); camFlag = false; return f; },
+    setScheme(sch, cam) {
+      scheme = sch === 'keys' ? 'keys' : 'default';
+      camMode = cam === 'hold' ? 'hold' : 'toggle';
+      camFlag = false;
+    },
+    // En modo alternar devuelve true una vez por pulsación; en modo mantener solo cuenta el táctil.
+    ballCamToggled() {
+      const f = (camMode === 'toggle' && camFlag) || touch.camToggled();
+      camFlag = false;
+      return f;
+    },
+    // Tecla o botón de cámara balón mantenido (modo mantener)
+    ballCamHeld() { return keys.has(camKey()) || padHeld(3); },
+    scoreboardHeld() { return keys.has('Tab') || padHeld(8); },
+    // Índice 0-3 de la tecla (1-4) o cruz del mando recién pulsada, o -1
+    quickChat() {
+      const p = pad();
+      for (let i = 0; i < 4; i++) if (padEdge(p, 12 + i)) chatQ.push(i);
+      return chatQ.length ? chatQ.shift() : -1;
+    },
     hitboxToggled() { const f = hitFlag; hitFlag = false; return f; },
-    reset() { touch.reset(); keys.clear(); mouse.left = mouse.right = false; camFlag = hitFlag = false; },
+    reset() { touch.reset(); keys.clear(); mouse.left = mouse.right = false; camFlag = hitFlag = false; chatQ.length = 0; },
   };
 }

@@ -248,3 +248,26 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
 body.tc-touch #boost{right:auto;bottom:auto;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));transform:scale(.5);transform-origin:top left}
 body.tc-touch #speed{right:auto;bottom:auto;left:calc(92px + env(safe-area-inset-left));top:calc(22px + env(safe-area-inset-top));transform:scale(.6);transform-origin:top left;text-align:left}
 .tc-btn{font-size:2vmin;letter-spacing:0;overflow:hidden;text-overflow:clip;padding:0 2px}
+
+/* Chat rápido */
+#chat-log{position:absolute;left:12px;top:64px;display:flex;flex-direction:column;gap:4px;max-width:260px}
+#chat-log .msg{background:#060a14cc;border-left:3px solid var(--neon);border-radius:6px;padding:4px 10px;font-size:14px;animation:chatin .18s ease-out}
+#chat-log .msg b{margin-right:6px}
+@keyframes chatin{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+#chat-menu{position:absolute;left:12px;bottom:24%;background:#060a14e6;border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:200px;font-size:15px}
+#chat-menu h4{color:var(--neon);font-size:12px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:4px}
+#chat-menu div{padding:2px 0}
+#chat-menu kbd{margin-right:8px}
+/* Marcador de partida (mantener Tab) */
+#tab-board{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,92vw);background:#060a14d8;border:1px solid var(--line);border-radius:14px;padding:12px 16px;backdrop-filter:blur(4px)}
+#tab-board .tb-head{display:flex;justify-content:center;align-items:center;gap:18px;font-weight:900;font-size:30px;margin-bottom:8px}
+#tab-board .tb-head small{font-size:16px;color:var(--dim)}
+#tab-board .tb-head .b{color:#8cc4ff}#tab-board .tb-head .o{color:#ffc58a}
+#tab-board table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:6px}
+#tab-board th{color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-align:center;padding:3px 4px}
+#tab-board td{text-align:center;padding:4px;border-top:1px solid #ffffff12}
+#tab-board th:first-child,#tab-board td:first-child{text-align:left}
+#tab-board .tm-b caption,#tab-board .tm-o caption{text-align:left;font-weight:900;letter-spacing:.14em;font-size:12px;padding:2px 0}
+#tab-board .tm-b caption{color:#8cc4ff}#tab-board .tm-o caption{color:#ffc58a}
+#tab-board tr.me td{background:#ffffff14;font-weight:700}
+#tab-board td.pts{font-weight:900}
