@@ -51,7 +51,14 @@ export const PHYS = {
     [2500, 0.00088],
   ],
   LATERAL_GRIP: 7000,
-  POWERSLIDE_GRIP: 1100,
+  POWERSLIDE_GRIP: 1100, // (sin uso directo: el agarre en derrape es LATERAL_GRIP × POWERSLIDE_LAT_FACTOR)
+  // Derrape: el freno de mano entra en 0.2 s y sale en 0.5 s; el agarre lateral cae al 10 %
+  // y las ruedas giran más (ángulo de dirección en derrape frente al normal, según la velocidad).
+  POWERSLIDE_RISE: 5,
+  POWERSLIDE_FALL: 2,
+  POWERSLIDE_LAT_FACTOR: 0.1,
+  STEER_ANGLE_CURVE: [[0, 0.53356], [500, 0.3193], [1000, 0.18203], [1500, 0.1057], [1750, 0.08507], [3000, 0.03454]],
+  POWERSLIDE_STEER_ANGLE_CURVE: [[0, 0.39235], [2500, 0.1261]],
 
   STICKY_ACCEL: 325,
 

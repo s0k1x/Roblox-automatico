@@ -308,17 +308,25 @@ export class Game {
           dv = -Math.sign(vf) * Math.min(Math.abs(vf), P.COAST_ACCEL * dt);
         }
         if (boosting) dv += P.BOOST_ACCEL * dt;
-        if (inp.handbrake && Math.abs(thr) < 0.01) dv = -Math.sign(vf) * Math.min(Math.abs(vf), P.COAST_ACCEL * 0.5 * dt);
+        // Freno de mano progresivo (sube en 0.2 s, baja en 0.5 s)
+        c.hbVal = clamp((c.hbVal || 0) + (inp.handbrake ? P.POWERSLIDE_RISE : -P.POWERSLIDE_FALL) * dt, 0, 1);
+        const hbv = c.hbVal;
+        if (hbv > 0 && Math.abs(thr) < 0.01) dv = -Math.sign(vf) * Math.min(Math.abs(vf), P.COAST_ACCEL * (1 - 0.5 * hbv) * dt);
         vf += dv;
 
-        const grip = inp.handbrake ? P.POWERSLIDE_GRIP : P.LATERAL_GRIP;
+        const grip = P.LATERAL_GRIP * (1 - (1 - P.POWERSLIDE_LAT_FACTOR) * hbv);
         vl -= Math.sign(vl) * Math.min(Math.abs(vl), grip * dt);
         c.vel = add(add(scale(o.f, vf), scale(o.l, vl)), scale(n, vn));
 
         // Giro: velocidad angular = curvatura(v) * v * dirección
         const curv = curve(P.STEER_CURVE, Math.abs(vf));
         let yawRate = -inp.steer * curv * vf;
-        if (inp.handbrake) yawRate *= 1.35;
+        if (hbv > 0) {
+          // En derrape las ruedas giran más: escala el giro por la razón entre ambos ángulos
+          const sp = Math.abs(vf);
+          const ratio = curve(P.POWERSLIDE_STEER_ANGLE_CURVE, sp) / curve(P.STEER_ANGLE_CURVE, sp);
+          yawRate *= 1 + (ratio - 1) * hbv;
+        }
         c.ang = scale(n, yawRate);
 
         // Fuerza que pega el coche a la superficie: 0.5 g en suelo, hasta 1.5 g en paredes

@@ -130,4 +130,19 @@ for (const [name, start, yaw] of [['pared', [2500, 0], 0], ['diagonal', [2400, 3
   ok(dp < 5, `predicción del coche propio: desviación ${dp.toFixed(2)} uu tras 1 s`);
 }
 
+// Derrape: a 1400 uu/s gira más rápido que sin derrape y el coche patina (velocidad lateral)
+{
+  const turn = (hb) => {
+    const G = new Game({ teamSize: 1 }); for (const c of G.cars) G.setHuman(c.id);
+    G.phase = 'play'; G.ball.pos = [3000, 3000, 93];
+    const c = G.cars[0]; G.placeCar(c, [0, -2000], Math.PI / 2); c.vel = [0, 1400, 0];
+    let lat = 0;
+    for (let i = 0; i < 60; i++) { G.setInput(0, { throttle: 1, steer: 1, handbrake: hb }); G.step(); lat = Math.max(lat, Math.abs(c.vel[0] * c.o.l[0] + c.vel[1] * c.o.l[1])); }
+    return { yaw: Math.atan2(c.o.f[1], c.o.f[0]), lat };
+  };
+  const n = turn(false), d = turn(true);
+  ok(Math.abs(Math.PI / 2 - d.yaw) > Math.abs(Math.PI / 2 - n.yaw) * 1.3 && d.lat > 300 && n.lat < 150,
+    `derrape: gira más (${(Math.PI / 2 - d.yaw).toFixed(2)} rad frente a ${(Math.PI / 2 - n.yaw).toFixed(2)}) y patina (${d.lat.toFixed(0)} uu/s lateral)`);
+}
+
 process.exit(fails ? 1 : 0);

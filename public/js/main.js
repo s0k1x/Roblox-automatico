@@ -985,4 +985,4 @@ applyAll();
 requestAnimationFrame(frame);
 
 // Útil para pruebas
-window.__bt = { get game() { return game; }, get pred() { return predicting && pg ? { pos: pg.cars[myCarId].pos.slice(), hist: pHist.length, off: pOff.slice() } : null; } };
+window.__bt = { get dbg() { const me = latest && latest.cars.find((c) => c.id === myCarId); return { mode, ws: !!ws, predicting, snaps: snaps.length, myCarId, phase: latest && latest.phase, hasX: !!(me && me.x), ack: latest && latest.ack, seqNo }; }, get game() { return game; }, get pred() { return predicting && pg ? { pos: pg.cars[myCarId].pos.slice(), hist: pHist.length, off: pOff.slice() } : null; } };
