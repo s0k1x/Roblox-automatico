@@ -240,6 +240,11 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
 .tc-small{width:12vmin;height:7vmin;border-radius:3.5vmin;font-size:1.8vmin;top:var(--tc-t)}
 .tc-pause{right:var(--tc-r)}
 .tc-cam{right:calc(var(--tc-r) + 14vmin)}
-.tc-rotate{display:none;position:absolute;left:50%;top:calc(var(--tc-t) + 9vmin);transform:translateX(-50%);padding:1.6vmin 3vmin;border-radius:99px;background:#0b1224bb;border:1px solid #ffffff44;color:#fff;font-size:3.4vmin;white-space:nowrap;pointer-events:none}
+.tc-rotate{display:none;position:absolute;left:50%;top:calc(var(--tc-t) + 20vmin);transform:translateX(-50%);padding:1.6vmin 3vmin;border-radius:99px;background:#0b1224bb;border:1px solid #ffffff44;color:#fff;font-size:3.4vmin;white-space:nowrap;pointer-events:none}
 .tc-root.tc-portrait .tc-rotate{display:block}
 @media(orientation:portrait){.tc-stick{width:30vmin;height:30vmin;margin:-15vmin 0 0 -15vmin}}
+
+/* Con controles táctiles: medidor de turbo y velocidad arriba a la izquierda, más pequeños */
+body.tc-touch #boost{right:auto;bottom:auto;left:calc(10px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));transform:scale(.5);transform-origin:top left}
+body.tc-touch #speed{right:auto;bottom:auto;left:calc(92px + env(safe-area-inset-left));top:calc(22px + env(safe-area-inset-top));transform:scale(.6);transform-origin:top left;text-align:left}
+.tc-btn{font-size:2vmin;letter-spacing:0;overflow:hidden;text-overflow:clip;padding:0 2px}

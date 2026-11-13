@@ -32,6 +32,7 @@ export function createTouchControls() {
     const playing = forced !== null ? forced : (active || (hud && !hud.classList.contains('hidden')));
     const show = isTouch && !!playing;
     root.classList.toggle('tc-off', !show);
+    document.body.classList.toggle('tc-touch', show); // el HUD se recoloca para no quedar bajo los botones
     root.classList.toggle('tc-portrait', show && window.innerHeight > window.innerWidth);
     if (!show) releaseAll();
   }

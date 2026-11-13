@@ -89,7 +89,208 @@ function analyze(root) {
       info.swatches.set(key, (info.swatches.get(key) || 0) + area);
     }
   }
+  // puntos de la superficie para faros, pilotos, tubo de turbo y franja lateral (rayos en el espacio del modelo)
+  const h = bb.max.y - bb.min.y, hw = (bb.max.x - bb.min.x) / 2, xc = (bb.max.x + bb.min.x) / 2;
+  const at = (fy) => bb.min.y + fy * h;
+  info.lamps = {
+    hl: [1, -1].map((sg) => castRay(parts, new THREE.Vector3(xc + sg * hw * 0.58, at(LAMP_Y.head), bb.max.z + 1), new THREE.Vector3(0, 0, -1))),
+    tl: [1, -1].map((sg) => castRay(parts, new THREE.Vector3(xc + sg * hw * 0.58, at(LAMP_Y.tail), bb.min.z - 1), new THREE.Vector3(0, 0, 1))),
+    ex: castRay(parts, new THREE.Vector3(xc, at(LAMP_Y.exhaust), bb.min.z - 1), new THREE.Vector3(0, 0, 1)),
+    side: [1, -1].map((sg) => {
+      // franja lateral: la superficie más saliente entre los ejes, a la altura del faldón
+      let best = null;
+      for (const k of [0.3, 0.5, 0.7]) {
+        const z = info.wb + (info.wf - info.wb) * k;
+        const r = castRay(parts, new THREE.Vector3(xc + sg * (hw + 1), at(LAMP_Y.side), z), new THREE.Vector3(-sg, 0, 0));
+        if (r && (!best || Math.abs(r.p.x - xc) > Math.abs(best.p.x - xc))) best = r;
+      }
+      return best;
+    }),
+  };
   return { root, parts, wheelNodes, info };
+}
+// Alturas (fracción del alto de la carrocería) de cada elemento luminoso
+const LAMP_Y = { head: 0.42, tail: 0.5, exhaust: 0.22, side: 0.2 };
+const _rc = new THREE.Raycaster();
+function castRay(parts, o, d) {
+  _rc.set(o, d);
+  const hit = _rc.intersectObjects(parts, false)[0];
+  if (!hit) return null;
+  const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+  if (n.dot(d) > 0) n.negate();
+  return { p: hit.point.clone(), n };
+}
+
+// ---------- pintura sobre el atlas de paleta ----------
+let atlasData = null; // píxeles originales del atlas (512x512)
+function getAtlas(parts) {
+  if (atlasData) return atlasData;
+  const img = parts[0].material.map && parts[0].material.map.image;
+  if (!img) return null;
+  const cv = document.createElement('canvas');
+  cv.width = img.width; cv.height = img.height;
+  const c = cv.getContext('2d', { willReadFrequently: true });
+  c.drawImage(img, 0, 0);
+  return (atlasData = c.getImageData(0, 0, cv.width, cv.height));
+}
+function swatchColor(data, col, row) { // color medio [r,g,b] de una muestra del atlas
+  const sw = data.width / SW_COLS, sh = data.height / SW_ROWS;
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let y = row * sh; y < (row + 1) * sh; y += 4) for (let x = col * sw; x < (col + 1) * sw; x += 4) {
+    const i = (y * data.width + x) * 4;
+    r += data.data[i]; g += data.data[i + 1]; b += data.data[i + 2]; n++;
+  }
+  return [r / n, g / n, b / n];
+}
+// Gris, blanco, negro o poco saturado: cristal, neumáticos, molduras y luces; no cuentan como pintura.
+function isNeutral([r, g, b]) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 510;
+  const s = mx === mn ? 0 : (mx - mn) / (255 - Math.abs(mx + mn - 255));
+  return s < 0.3 || l < 0.2 || l > 0.88;
+}
+function hueOf([r, g, b]) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn || 1;
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return ((h * 60) + 360) % 360;
+}
+const luma = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
+// Tonos de carrocería de un modelo: principal (el más usado entre los no neutros) y, si lo hay, un segundo claramente distinto.
+function bodyTones(m, data) {
+  if (m.tones) return m.tones;
+  const list = [...m.info.swatches.entries()].map(([k, area]) => {
+    const [col, row] = k.split(',').map(Number);
+    return { col, row, area, rgb: swatchColor(data, col, row) };
+  }).filter((t) => !isNeutral(t.rgb)).sort((a, b) => b.area - a.area);
+  const main = list[0] || null;
+  let second = null;
+  if (main) {
+    second = list.find((t) => t !== main && t.area >= main.area * 0.12 && Math.abs(((hueOf(t.rgb) - hueOf(main.rgb) + 540) % 360) - 180) > 30) || null;
+  }
+  return (m.tones = { main, second });
+}
+const _texCache = new Map();
+// Textura derivada: los tonos de carrocería se sustituyen por los colores de pintura conservando su luminosidad relativa.
+function paintedTexture(name, m, a, b) {
+  const key = name + '|' + a + '|' + b;
+  let tex = _texCache.get(key);
+  if (tex) return tex;
+  const base = getAtlas(m.parts);
+  if (!base) return null;
+  const data = new ImageData(new Uint8ClampedArray(base.data), base.width, base.height);
+  const tones = bodyTones(m, base);
+  const sw = base.width / SW_COLS, sh = base.height / SW_ROWS;
+  const swap = (t, hex) => {
+    if (!t) return;
+    const n = parseInt(hex.slice(1), 16), tr = [(n >> 16) & 255, (n >> 8) & 255, n & 255]; // hex ya en sRGB
+    const ref = luma(...t.rgb) || 1;
+    for (let y = t.row * sh; y < (t.row + 1) * sh; y++) for (let x = t.col * sw; x < (t.col + 1) * sw; x++) {
+      const i = (y * base.width + x) * 4;
+      const k = Math.max(0.35, Math.min(1.4, luma(base.data[i], base.data[i + 1], base.data[i + 2]) / ref));
+      data.data[i] = Math.min(255, tr[0] * k); data.data[i + 1] = Math.min(255, tr[1] * k); data.data[i + 2] = Math.min(255, tr[2] * k);
+    }
+  };
+  swap(tones.main, a);
+  swap(tones.second, b);
+  const cv = document.createElement('canvas');
+  cv.width = base.width; cv.height = base.height;
+  cv.getContext('2d').putImageData(data, 0, 0);
+  tex = new THREE.CanvasTexture(cv);
+  tex.flipY = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  _texCache.set(key, tex);
+  return tex;
+}
+const _matCache = new Map();
+function bodyMaterial(name, m, a, b) {
+  const key = name + '|' + a + '|' + b;
+  let mat = _matCache.get(key);
+  if (!mat) {
+    mat = new THREE.MeshPhongMaterial({ map: paintedTexture(name, m, a, b), shininess: 70, specular: 0x667788, emissive: 0x10141c });
+    _matCache.set(key, mat);
+  }
+  return mat;
+}
+const _glowCache = new Map();
+function underglowMaterial(hex) {
+  let m = _glowCache.get(hex);
+  if (!m) {
+    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+    _glowCache.set(hex, m);
+  }
+  return m;
+}
+
+// ---------- carrocería GLB ajustada al hitbox ----------
+const _boxG = new THREE.BoxGeometry(1, 1, 1);
+const _cylG = new THREE.CylinderGeometry(1, 1, 1, 12).rotateX(Math.PI / 2); // eje z
+const _discG = new THREE.CircleGeometry(1, 14);
+const _Z = new THREE.Vector3(0, 0, 1);
+function placeOn(group, geo, mat, hit, sx, sy, sz, out) {
+  if (!hit) return;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(hit.p).addScaledVector(hit.n, out);
+  mesh.quaternion.setFromUnitVectors(_Z, hit.n);
+  mesh.scale.set(sx, sy, sz);
+  group.add(mesh);
+}
+// opts: { id, size, off, mats, team, colors: { a, b, w, t } } → { group, wheels }
+export function glbBody(opts) {
+  const { id, size, off, mats, colors } = opts;
+  const name = CAR_MODEL_FOR[id], m = MODELS[name];
+  const info = m.info, bb = info.body;
+  const Lm = bb.max.z - bb.min.z, Wm = bb.max.x - bb.min.x;
+  const sx = size[0] / Lm, sy = size[1] / Wm, sz = (sx + sy) / 2;
+  const zc = (bb.max.z + bb.min.z) / 2, xc = (bb.max.x + bb.min.x) / 2;
+  // modelo (x izquierda, y arriba, z morro) → coche (x morro, y izquierda, z arriba); ruedas apoyadas en z = -17
+  const fit = new THREE.Matrix4().set(
+    0, 0, sx, off[0] - zc * sx,
+    sy, 0, 0, -xc * sy,
+    0, sz, 0, -17 - info.ground * sz,
+    0, 0, 0, 1);
+  const group = new THREE.Group();
+  const model = new THREE.Group();
+  model.matrixAutoUpdate = false;
+  model.matrix.copy(fit);
+  model.matrixWorldNeedsUpdate = true;
+  group.add(model);
+  const bodyMat = bodyMaterial(name, m, colors.a, colors.b);
+  for (const p of m.parts) {
+    const mesh = new THREE.Mesh(p.geometry, bodyMat);
+    mesh.matrixAutoUpdate = false;
+    mesh.matrix.copy(p.matrixWorld);
+    model.add(mesh);
+  }
+  // luces y detalles del equipo (en unidades del modelo; la escala del coche los deforma con la carrocería)
+  const L = info.lamps, W = Wm;
+  for (const hit of L.hl) placeOn(model, _boxG, mats.head, hit, W * 0.2, 0.07, 0.03, 0.012);
+  for (const hit of L.tl) placeOn(model, _boxG, mats.tail, hit, W * 0.22, 0.07, 0.03, 0.012);
+  if (L.ex) {
+    placeOn(model, _cylG, mats.dark, L.ex, 0.1, 0.1, 0.16, 0.05);
+    placeOn(model, _discG, mats.glow, L.ex, 0.085, 0.085, 1, 0.135);
+  }
+  const span = (info.wf - info.wb) - 2 * info.r * 0.9;
+  for (const hit of L.side) {
+    placeOn(model, _boxG, mats.team, hit, 0.025, span, 0.045, 0.013);
+    if (hit) { // acento de pintura secundaria sobre la franja del equipo
+      const acc = { p: hit.p.clone().add(new THREE.Vector3(0, 0.07, 0)), n: hit.n };
+      placeOn(model, _boxG, mats.wing, acc, 0.02, span * 0.85, 0.03, 0.012);
+    }
+  }
+  // luz bajo el coche con el color del equipo
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), underglowMaterial('#' + mats.team.color.getHexString()));
+  glow.position.set(off[0], 0, -14.5);
+  glow.scale.set(size[0] * 0.92, size[1] * 0.86, 1);
+  glow.renderOrder = 2;
+  group.add(glow);
+  return {
+    group,
+    wheels: {
+      wf: (info.wf - zc) * sx / size[0], wb: (zc - info.wb) * sx / size[0],
+      r: info.r * sz, track: info.track * sy, ww: info.ww * sy * 0.9, wz: -17 + (info.cy - info.ground) * sz,
+    },
+  };
 }
 export function _debugModels() { return MODELS; }
 

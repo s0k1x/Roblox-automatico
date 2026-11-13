@@ -2,7 +2,7 @@
 // Todo el arte (estadio, coches, carteles) es de diseño propio y se genera por código.
 import * as THREE from 'three';
 import { buildTheme } from './maps.js';
-import { CUSTOM_BODIES } from './cars.js';
+import { CUSTOM_BODIES, preloadCarModels, hasCarModel, glbBody } from './cars.js';
 import { ARENA, BOOST_PADS, shrunkPlan } from '../shared/arena.js';
 import { HITBOXES, TEAM_COLORS, PHYS } from '../shared/constants.js';
 
@@ -780,6 +780,7 @@ const CAR_SPECS = {
   },
 };
 
+let carModelsReady = false; // true cuando han cargado los modelos 3D; hasta entonces se usan las carrocerías de respaldo
 function buildCar(hb, team, paint) {
   const m = carMats(team, paint);
   let sp = CAR_SPECS[hb.id] || CAR_SPECS.estandar;
@@ -801,7 +802,12 @@ function buildCar(hb, team, paint) {
   const P = { paint: [], dark: [], wing: [], glass: [], team: [], head: [], tail: [], glow: [] };
   const toPts = (a) => a.map(([u, v]) => [X(u), Z(v)]);
 
-  if (custom) {
+  if (carModelsReady && hasCarModel(hb.id)) {
+    // Modelo 3D de Kenney ajustado al hitbox (cars.js); las ruedas son las nuestras, en sus posiciones
+    const res = glbBody({ id: hb.id, size: hb.size, off: hb.off, mats: m, team, colors: resolvePaint(team, paint) });
+    grp.add(res.group);
+    sp = { ...sp, ...res.wheels };
+  } else if (custom) {
     // Carrocería de diseño propio (cars.js): mismo hitbox, otra forma
     const res = custom(THREE, { size: hb.size, off: hb.off, mats: m, team, paint });
     grp.add(res.group);
@@ -893,9 +899,9 @@ function buildCar(hb, team, paint) {
   for (const [wxp, front] of [[ox + sx * sp.wf, true], [ox - sx * sp.wb, false]]) {
     for (const wy of [-1, 1]) {
       const pivot = new THREE.Group();
-      pivot.position.set(wxp, wy * (sy / 2 - 6.5), 0);
+      pivot.position.set(wxp, wy * (sp.track != null ? sp.track : sy / 2 - 6.5), sp.wz || 0);
       const spin = new THREE.Group();
-      spin.scale.set(sp.r / 17, 1, sp.r / 17);
+      spin.scale.set(sp.r / 17, sp.ww ? sp.ww / 14 : 1, sp.r / 17);
       spin.add(new THREE.Mesh(tireGeo, tireMat), new THREE.Mesh(rg, m.rim));
       pivot.add(spin);
       grp.add(pivot);
@@ -945,6 +951,9 @@ export function createRenderer(canvas) {
   const sun = new THREE.DirectionalLight(0xffffff, 2.0);
   sun.position.set(-1500, 2000, 4000);
   scene.add(sun);
+
+  // Carga asíncrona de los modelos de coche: al terminar, los coches ya creados y la vitrina se regeneran.
+  preloadCarModels().then((ok) => { if (ok) carModelsReady = true; });
 
   const nBefore = scene.children.length;
   buildSky(scene);
@@ -1156,7 +1165,7 @@ export function createRenderer(canvas) {
     const hb = HITBOXES.find((h) => h.id === pv.hb) || HITBOXES[0];
     const p = pv.paint || null;
     const team = pv.team || 0;
-    const key = hb.id + '|' + team + '|' + (p ? [p.a, p.b, p.w, p.t].join() : '');
+    const key = hb.id + '|' + team + '|' + (p ? [p.a, p.b, p.w, p.t].join() : '') + '|' + carModelsReady;
     if (showcase && showcase.key === key) return;
     if (showcase) scene.remove(showcase.grp);
     const grp = buildCar(hb, team, p);
@@ -1329,7 +1338,7 @@ export function createRenderer(canvas) {
         seen.add(c.id);
         let o = cars.get(c.id);
         const pkey = c.paint ? [c.paint.a, c.paint.b, c.paint.w, c.paint.t].join() : '';
-        if (!o || o.hb !== c.hb || o.team !== c.team || o.pkey !== pkey) {
+        if (!o || o.hb !== c.hb || o.team !== c.team || o.pkey !== pkey || o.gv !== carModelsReady) {
           if (o) { scene.remove(o.grp, o.label, o.shadow); }
           const hb = HITBOXES.find((h) => h.id === c.hb) || HITBOXES[0];
           const grp = buildCar(hb, c.team, c.paint);
@@ -1338,7 +1347,7 @@ export function createRenderer(canvas) {
           scene.add(label);
           const shadow = new THREE.Mesh(shadowGeo, newShadowMat(0.55));
           scene.add(shadow);
-          o = { grp, label, shadow, hb: c.hb, team: c.team, pkey, tcol: trailColors(c.team, c.paint), name: c.name, hbObj: hb, acc: 0, acc2: 0, yaw: quatYaw(c.f), yr: 0, steer: 0 };
+          o = { grp, label, shadow, gv: carModelsReady, hb: c.hb, team: c.team, pkey, tcol: trailColors(c.team, c.paint), name: c.name, hbObj: hb, acc: 0, acc2: 0, yaw: quatYaw(c.f), yr: 0, steer: 0 };
           cars.set(c.id, o);
         }
         if (o.name !== c.name) { scene.remove(o.label); o.label = nameSprite(c.name, c.team); scene.add(o.label); o.name = c.name; }
