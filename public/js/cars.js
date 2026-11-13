@@ -213,10 +213,26 @@ function bodyMaterial(name, m, a, b) {
   return mat;
 }
 const _glowCache = new Map();
+let _glowTex = null;
+function glowTexture() {
+  // Degradado radial suave (luz difusa bajo el coche, sin bordes rectos)
+  if (_glowTex || typeof document === 'undefined') return _glowTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,0.9)');
+  gr.addColorStop(0.45, 'rgba(255,255,255,0.35)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  _glowTex = new THREE.CanvasTexture(c);
+  _glowTex.colorSpace = THREE.SRGBColorSpace;
+  return _glowTex;
+}
 function underglowMaterial(hex) {
   let m = _glowCache.get(hex);
   if (!m) {
-    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex), map: glowTexture(), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
     _glowCache.set(hex, m);
   }
   return m;
@@ -227,11 +243,21 @@ const _boxG = new THREE.BoxGeometry(1, 1, 1);
 const _cylG = new THREE.CylinderGeometry(1, 1, 1, 12).rotateX(Math.PI / 2); // eje z
 const _discG = new THREE.CircleGeometry(1, 14);
 const _Z = new THREE.Vector3(0, 0, 1);
+const _ALONG = new THREE.Vector3(0, 0, 1); // eje morro-cola del modelo
+const _tmpX = new THREE.Vector3(), _tmpY = new THREE.Vector3(), _tmpM = new THREE.Matrix4();
 function placeOn(group, geo, mat, hit, sx, sy, sz, out) {
   if (!hit) return;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.copy(hit.p).addScaledVector(hit.n, out);
-  mesh.quaternion.setFromUnitVectors(_Z, hit.n);
+  // Z local = normal de la superficie; Y local = dirección morro-cola (así las franjas van a lo largo del costado)
+  _tmpY.copy(_ALONG).addScaledVector(hit.n, -_ALONG.dot(hit.n));
+  if (_tmpY.lengthSq() < 1e-6) mesh.quaternion.setFromUnitVectors(_Z, hit.n);
+  else {
+    _tmpY.normalize();
+    _tmpX.crossVectors(_tmpY, hit.n).normalize();
+    _tmpM.makeBasis(_tmpX, _tmpY, hit.n);
+    mesh.quaternion.setFromRotationMatrix(_tmpM);
+  }
   mesh.scale.set(sx, sy, sz);
   group.add(mesh);
 }
@@ -281,7 +307,7 @@ export function glbBody(opts) {
   // luz bajo el coche con el color del equipo
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), underglowMaterial('#' + mats.team.color.getHexString()));
   glow.position.set(off[0], 0, -14.5);
-  glow.scale.set(size[0] * 0.92, size[1] * 0.86, 1);
+  glow.scale.set(size[0] * 1.25, size[1] * 1.15, 1);
   glow.renderOrder = 2;
   group.add(glow);
   return {
