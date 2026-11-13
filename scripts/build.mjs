@@ -16,6 +16,10 @@ for (const rel of ['loaders/GLTFLoader.js', 'libs/meshopt_decoder.module.js', 'u
   fs.mkdirSync(path.dirname(dst), { recursive: true });
   fs.copyFileSync(path.join(root, 'node_modules/three/examples/jsm', rel), dst);
 }
+// Postproceso (brillo suave) y entorno de reflejos: se copian las carpetas completas porque se importan entre sí.
+for (const dir of ['postprocessing', 'shaders', 'environments']) {
+  fs.cpSync(path.join(root, 'node_modules/three/examples/jsm', dir), path.join(out, 'vendor/addons', dir), { recursive: true });
+}
 fs.writeFileSync(path.join(out, '.nojekyll'), '');
 
 // Marca de versión en todas las rutas para que el navegador no mezcle archivos viejos y nuevos.

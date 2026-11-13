@@ -24,10 +24,12 @@ const CAM_PRESETS = {
   close: { fov: 100, dist: 200, height: 90, angle: -2, stiff: 0.6 },
   far: { fov: 100, dist: 350, height: 130, angle: -4, stiff: 0.35 },
 };
+// En móvil se empieza en calidad baja; en el resto, automática.
+const IS_MOBILE = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
 const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', ...CAM_PRESETS.default, ballcamDefault: false,
   camPreset: 'default', shake: true, swivel: 5, transition: 1, invertLook: false,
   rumble: true, showNames: true, stickSens: 100,
-  botLevel: 1, map: 'clasico', infBoost: false, quality: 'alta', fpsLimit: 0, showFps: false,
+  botLevel: 1, map: 'clasico', infBoost: false, quality: IS_MOBILE ? 'baja' : 'auto', fpsLimit: 0, showFps: false,
   showSpeed: true, showScore: true, uiScale: 100, scheme: 'default', camMode: 'toggle',
   volMaster: 80, volSfx: 80, volEngine: 60, volMusic: 50,
   challenges: { week: '', prog: {} },
@@ -72,7 +74,7 @@ const SCHEMA = {
     ['range', 'uiScale', 'Escala de la interfaz', 80, 120, 5, ' %'],
   ],
   vid: [
-    ['seg', 'quality', 'Calidad', [['alta', 'Alta'], ['baja', 'Baja']]],
+    ['seg', 'quality', 'Calidad', [['auto', 'Automática'], ['alta', 'Alta'], ['baja', 'Baja']]],
     ['seg', 'fpsLimit', 'Limitar FPS', [[30, '30'], [60, '60'], [0, 'Sin límite']]],
     ['check', 'showFps', 'Mostrar FPS'],
   ],
@@ -91,7 +93,7 @@ for (const items of Object.values(SCHEMA)) for (const it of items) {
 if (![30, 60].includes(cfg.fpsLimit)) cfg.fpsLimit = 0;
 if (cfg.scheme !== 'keys') cfg.scheme = 'default';
 if (cfg.camMode !== 'hold') cfg.camMode = 'toggle';
-if (cfg.quality !== 'baja') cfg.quality = 'alta';
+if (!['auto', 'alta', 'baja'].includes(cfg.quality)) cfg.quality = DEFAULTS.quality;
 if (!MAPS.some((m) => m.id === cfg.map)) cfg.map = 'clasico';
 if (!['default', 'close', 'far', 'custom'].includes(cfg.camPreset) ||
   (cfg.camPreset !== 'custom' && Object.keys(CAM_PRESETS.default).some((k) => cfg[k] !== CAM_PRESETS[cfg.camPreset][k]))) cfg.camPreset = 'custom';
@@ -114,6 +116,7 @@ function applyAll() {
   input.setScheme(cfg.scheme, cfg.camMode);
   applyCam(); applyAudio(); applyUI();
   R('setQuality', cfg.quality);
+  R('setDynamicAllowed', !cfg.fpsLimit);
   R('setMap', cfg.map);
   R('setShowNames', cfg.showNames);
 }
@@ -282,6 +285,7 @@ for (const seg of document.querySelectorAll('.seg[data-key]')) {
     cfg[k] = typeof DEFAULTS[k] === 'number' ? +b.dataset.v : b.dataset.v;
     save(); markSel();
     if (k === 'quality') renderer.setQuality(cfg.quality);
+    if (k === 'fpsLimit') R('setDynamicAllowed', !cfg.fpsLimit);
     if (k === 'map') R('setMap', cfg.map);
   });
 }
@@ -1052,11 +1056,34 @@ let last = performance.now();
 let cursorHidden = false;
 let selPrev = false;
 let fpsN = 0, fpsT = 0;
+// Diagnóstico (F9 o ?perf=1): FPS, ms por imagen, dibujos y triángulos.
+let perfEl = null, perfN = 0, perfT = 0;
+function setPerf(on) {
+  if (on && !perfEl) {
+    perfEl = document.createElement('div');
+    perfEl.style.cssText = 'position:fixed;left:8px;top:28px;z-index:60;font:12px/1.4 monospace;color:#9bff57;background:#000b;padding:4px 8px;border-radius:4px;pointer-events:none;white-space:pre';
+    document.body.appendChild(perfEl);
+  }
+  if (perfEl) perfEl.style.display = on ? 'block' : 'none';
+  window.__bt = on ? { get renderer() { return renderer; } } : undefined; // gancho para medir (debugFx, getStats)
+}
+if (/[?&]perf=1/.test(location.search)) setPerf(true);
+window.addEventListener('keydown', (e) => { if (e.key === 'F9') { e.preventDefault(); setPerf(!(perfEl && perfEl.style.display === 'block')); } });
+function perfTick(dt) {
+  if (!perfEl || perfEl.style.display !== 'block') return;
+  perfN++; perfT += dt;
+  if (perfT < 0.5) return;
+  const st = renderer.getStats ? renderer.getStats() : null;
+  if (st) perfEl.textContent = Math.round(perfN / perfT) + ' FPS  ' + (perfT / perfN * 1000).toFixed(1) + ' ms/img\n' +
+    'dibujos ' + st.calls + '  triángulos ' + st.tris + '\nresolución x' + st.pr.toFixed(2) + (st.bloom ? '  brillo on' : '  brillo off') + '  cpu ' + st.cpu.toFixed(1) + ' ms';
+  perfN = 0; perfT = 0;
+}
 function frame(now) {
   requestAnimationFrame(frame);
   if (cfg.fpsLimit && now - last < 1000 / cfg.fpsLimit - 1.5) return;
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  perfTick(dt);
   if (cfg.showFps) {
     fpsN++; fpsT += dt;
     if (fpsT >= 0.5) { $('fps').textContent = Math.round(fpsN / fpsT) + ' FPS'; fpsN = 0; fpsT = 0; }

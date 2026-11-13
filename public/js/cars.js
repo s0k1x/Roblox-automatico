@@ -203,11 +203,18 @@ function paintedTexture(name, m, a, b) {
   return tex;
 }
 const _matCache = new Map();
+// Pintura brillante con reflejos (barniz sobre la carrocería); en calidad baja se mantiene el material sencillo.
+let _fancy = false;
+export function setFancyPaint(v) { _fancy = !!v; }
+export function isFancyPaint() { return _fancy; }
 function bodyMaterial(name, m, a, b) {
-  const key = name + '|' + a + '|' + b;
+  const key = name + '|' + a + '|' + b + (_fancy ? '|f' : '');
   let mat = _matCache.get(key);
   if (!mat) {
-    mat = new THREE.MeshPhongMaterial({ map: paintedTexture(name, m, a, b), shininess: 70, specular: 0x667788, emissive: 0x10141c });
+    const map = paintedTexture(name, m, a, b);
+    mat = _fancy
+      ? new THREE.MeshPhysicalMaterial({ map, roughness: 0.42, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.1, emissive: 0x10141c })
+      : new THREE.MeshPhongMaterial({ map, shininess: 70, specular: 0x667788, emissive: 0x10141c });
     _matCache.set(key, mat);
   }
   return mat;
@@ -305,7 +312,7 @@ export function glbBody(opts) {
     }
   }
   // luz bajo el coche con el color del equipo
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), underglowMaterial('#' + mats.team.color.getHexString()));
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), underglowMaterial('#' + (mats.teamBase || mats.team.color).getHexString()));
   glow.position.set(off[0], 0, -14.5);
   glow.scale.set(size[0] * 1.25, size[1] * 1.15, 1);
   glow.renderOrder = 2;
