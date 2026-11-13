@@ -188,6 +188,7 @@ function createParticles(scene) { // scene: la escena propia de los efectos (se 
       life[i] = lf; age[i] = 0; size0[i] = sz;
       rgb[i * 3] = r; rgb[i * 3 + 1] = gg; rgb[i * 3 + 2] = b;
     },
+    clear() { age.fill(1e9); },
     update(dt) {
       const drag = Math.exp(-1.6 * dt);
       for (let i = 0; i < N; i++) {
@@ -1362,7 +1363,7 @@ export function createRenderer(canvas) {
   function goalFx(id, pos, team, sc = 1) {
     const c = new THREE.Color(teamHex(team || 0));
     const tc = [c.r, c.g, c.b], lt = [c.r * 0.55 + 0.45, c.g * 0.55 + 0.45, c.b * 0.55 + 0.45];
-    const sz = sc < 1 ? 0.3 + 0.7 * sc : 1;
+    const sz = sc < 1 ? 0.1 + 0.5 * sc : 1;
     const P = [pos[0], pos[1], Math.max(pos[2], 120 * sc)];
     const at = (dx, dy, dz) => [P[0] + dx * sc, P[1] + dy * sc, P[2] + dz * sc];
     const em = (p, v, lf, s, col) => particles.emit(p, [v[0] * sc, v[1] * sc, v[2] * sc], lf, s * sz, col[0], col[1], col[2]);
@@ -1629,7 +1630,7 @@ export function createRenderer(canvas) {
         particles.emit(q, [-f[0] * 260 + rnd() * 50, -f[1] * 260 + rnd() * 50, rnd() * 50], 0.4 + Math.random() * 0.2, hot ? 20 : 28, c[0], c[1], c[2]);
       }
     }
-    if (garage && fxPreviewReq !== null) { goalFx(fxPreviewReq, [C[0], C[1], C[2] + 70], 0, 0.14); fxPreviewReq = null; }
+    if (garage && fxPreviewReq !== null) { goalFx(fxPreviewReq, [C[0], C[1], C[2] + 40], 0, 0.14); fxPreviewReq = null; }
     surroundings.setJump(0, 0);
     fxTick(dt);
     particles.update(dt);
@@ -1649,6 +1650,7 @@ export function createRenderer(canvas) {
     setBallCam(v) { ballCam = !!v; },
     previewGoalFx(id) { fxPreviewReq = clamp(id | 0, 0, 4); },
     resetTrail,
+    clearFx() { particles.clear(); fxQ.length = 0; resetTrail(); },
     setShowNames(v) { showNames = !!v; },
     setShowHitbox(v) { showHitbox = !!v; },
     setMap,

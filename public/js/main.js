@@ -1147,7 +1147,7 @@ function interpolated(dt) {
 const REC_SEC = 7;
 const rec = [];
 let recLast = -1;
-const replay = { pending: false, wait: 0, goalT: 0, goal: null, who: '', active: false, t: 0, D: 2, fastReal: 1, u0: 0, te: 0, side: 1, sg: 1, bx: 0, cut: false, cp: null, lp: null };
+const replay = { pending: false, wait: 0, goalT: 0, goal: null, who: '', active: false, t: 0, D: 2, fastReal: 1, u0: 0, te: 0, side: 1, sg: 1, bx: 0, cut: false, cp: null, lp: null, fired: false };
 function recordState(s) {
   if (replay.active || s.freePlay) return;
   if (s.phase === 'countdown' || s.phase === 'ended') { rec.length = 0; recLast = -1; return; }
@@ -1193,7 +1193,7 @@ function startReplay(live) {
   $('replay-who').textContent = replay.who ? `${g && g.own ? 'Gol en propia puerta de' : 'Gol de'} ${replay.who}${g ? ' · ' + g.speed + ' km/h' : ''}` : 'Gol';
   $('replay-skip').textContent = IS_MOBILE ? 'Toca la pantalla para saltar' : 'Pulsa Espacio o Intro para saltar';
   show('replay', true); $('hud').classList.add('replaying');
-  R('resetTrail');
+  R('clearFx'); replay.fired = false; // se quitan las partículas del gol real: se repetirán al llegar al gol
   audio.ui('replay');
 }
 function replayStop() {
@@ -1227,6 +1227,7 @@ function replayStep(dt, live) {
   const slowReal = replay.D - replay.fastReal;
   const u = replay.t < replay.fastReal ? replay.u0 + replay.t * 1.6 : replay.te - slowReal * 0.4 + (replay.t - replay.fastReal) * 0.4;
   const st = sampleAt(u);
+  if (!replay.fired && u >= replay.goalT) { replay.fired = true; renderer.handleEvents([replay.goal], st); }
   return { state: st, cam: replayCam(st, dt) };
 }
 window.addEventListener('keydown', (e) => {
