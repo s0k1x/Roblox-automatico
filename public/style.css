@@ -271,3 +271,6 @@ body.tc-touch #speed{right:auto;bottom:auto;left:calc(92px + env(safe-area-inset
 #tab-board .tm-b caption{color:#8cc4ff}#tab-board .tm-o caption{color:#ffc58a}
 #tab-board tr.me td{background:#ffffff14;font-weight:700}
 #tab-board td.pts{font-weight:900}
+
+/* Durante la partida no se ve el puntero del ratón */
+body.jugando, body.jugando canvas { cursor: none; }

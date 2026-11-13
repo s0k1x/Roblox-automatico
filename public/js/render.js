@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { buildTheme } from './maps.js';
 import { CUSTOM_BODIES, preloadCarModels, hasCarModel, glbBody } from './cars.js';
-import { ARENA, BOOST_PADS, shrunkPlan } from '../shared/arena.js';
+import { ARENA, BOOST_PADS, shrunkPlan, wallDist, wallNormal } from '../shared/arena.js';
 import { HITBOXES, TEAM_COLORS, PHYS } from '../shared/constants.js';
 
 const { HX, HY, H, EDGE_R, GW, GH, GD, CORNER } = ARENA;
@@ -1090,57 +1090,87 @@ export function createRenderer(canvas) {
     if (ex > 0) { v.x -= Math.sign(v.x) * ex / 2; v.y -= Math.sign(v.y) * ex / 2; }
   }
 
+  // Rumbo del coche independiente de flips y vuelcos: combina el morro y el techo proyectados.
+  // (normal: morro; morro abajo: techo; boca abajo: morro invertido; en pared: hacia la pared)
+  function heading(f, u, prev) {
+    let hx = f[0] * u[2] - u[0] * f[2], hy = f[1] * u[2] - u[1] * f[2];
+    let l = Math.hypot(hx, hy);
+    if (l < 0.3) { hx = f[0]; hy = f[1]; l = Math.hypot(hx, hy); } // de lado: el morro sirve
+    return l > 0.2 ? cam.tmpH.set(hx / l, hy / l) : cam.tmpH.copy(prev);
+  }
+  // Mantiene un punto dentro del estadio usando la misma geometría que la física
+  function keepInside(v, margin) {
+    for (let i = 0; i < 3; i++) {
+      const d = wallDist(v.x, v.y, v.z);
+      if (d >= margin) return;
+      const n = wallNormal(v.x, v.y, v.z);
+      v.x += n[0] * (margin - d); v.y += n[1] * (margin - d); v.z += n[2] * (margin - d);
+    }
+  }
+
   function updateCamera(state, me, dt) {
     const set = camSettings;
     const target = me && !me.dead ? me : null;
     const b = state.ball.p;
-    let anchor, f;
-    if (target) { anchor = target.p; f = target.f; } else { anchor = b; f = [cam.dir.x, cam.dir.y, 0]; }
-    const k = 1 - Math.exp(-dt * (4 + 26 * set.stiff));
-    // dirección de coche (horizontal)
-    const hl = Math.hypot(f[0], f[1]);
-    const carDir = hl > 0.25 ? new THREE.Vector2(f[0] / hl, f[1] / hl) : cam.dir.clone();
-    if (!cam.init) { cam.dir.copy(carDir); cam.init = true; }
+    if (!cam.tmpH) { cam.tmpH = new THREE.Vector2(); cam.h = new THREE.Vector2(0, 1); cam.bh = new THREE.Vector2(0, 1); cam.p = new THREE.Vector3(); cam.look = new THREE.Vector3(0, 1, 0); }
+    const stiff = clamp(set.stiff ?? 0.45, 0, 1);
     const trans = clamp(set.transition ?? 1.2, 0.3, 4);
-    const useBall = (ballCam && target) ? 1 : 0;
-    cam.blend += (useBall - cam.blend) * (1 - Math.exp(-dt * 5 * trans));
-    // mirada libre (stick derecho / ratón): gira la cámara alrededor del coche y vuelve al soltar
     const sw = clamp(set.swivel ?? 4.7, 0.5, 12);
-    const lk = 1 - Math.exp(-dt * sw * 1.1);
+
+    // Modo: coche, balón (con transición) o espectador si el coche está destruido
+    const useBall = ballCam && target ? 1 : 0;
+    cam.blend += (useBall - cam.blend) * (1 - Math.exp(-dt * 4 * trans));
+
+    // Rumbo del coche (suavizado: la rigidez decide cuánto se retrasa la cámara al girar)
+    if (target) {
+      const h = heading(target.f, target.u, cam.h);
+      if (!cam.init) { cam.h.copy(h); cam.bh.copy(h); }
+      cam.h.lerp(h, 1 - Math.exp(-dt * (5 + 20 * stiff))).normalize();
+    }
+    // Dirección horizontal hacia el balón (se congela si el balón está justo encima)
+    const anchor = target ? target.p : b;
+    const bx = b[0] - anchor[0], by = b[1] - anchor[1], bz = b[2] - anchor[2];
+    const bl = Math.hypot(bx, by);
+    if (bl > 150) cam.bh.lerp(cam.tmpH.set(bx / bl, by / bl), 1 - Math.exp(-dt * 14)).normalize();
+    const dir = new THREE.Vector2().copy(cam.h).multiplyScalar(1 - cam.blend).addScaledVector(cam.bh, cam.blend);
+    if (dir.lengthSq() < 1e-4) dir.copy(cam.bh); dir.normalize();
+
+    // Mirar alrededor (stick derecho / ratón con botón central): gira hasta 180° y vuelve al soltar
+    const lk = 1 - Math.exp(-dt * sw * 1.5);
     cam.lx += (look.x - cam.lx) * lk;
     cam.ly += (look.y - cam.ly) * lk;
     const lm = Math.min(1, Math.hypot(cam.lx, cam.ly));
-    // dirección hacia el balón
-    const bx2 = b[0] - anchor[0], by2 = b[1] - anchor[1];
-    const bl = Math.hypot(bx2, by2);
-    const ballDir = bl > 60 ? new THREE.Vector2(bx2 / bl, by2 / bl) : carDir;
-    const wantDir = target
-      ? new THREE.Vector2().copy(carDir).multiplyScalar(1 - cam.blend).addScaledVector(ballDir, cam.blend)
-      : carDir;
-    if (wantDir.lengthSq() < 1e-4) wantDir.copy(carDir);
-    wantDir.normalize();
-    cam.dir.lerp(wantDir, target && cam.blend > 0.5 ? 1 - Math.exp(-dt * 12) : k).normalize();
-    // dirección efectiva con el giro libre
-    const ang = -cam.lx * 2.6;
+    const ang = -cam.lx * Math.PI;
     const ca = Math.cos(ang), sa = Math.sin(ang);
-    const dx = cam.dir.x * ca - cam.dir.y * sa, dy = cam.dir.x * sa + cam.dir.y * ca;
+    const dx = dir.x * ca - dir.y * sa, dy = dir.x * sa + dir.y * ca;
 
-    const dist = target ? set.dist : set.dist * 1.6;
-    const hgt = target ? set.height : set.height * 1.8;
-    tv.set(anchor[0] - dx * dist, anchor[1] - dy * dist, anchor[2] + hgt - cam.ly * dist * 0.6);
-    clampPlan(tv);
-    tv.z = clamp(tv.z, 30, H - 40);
-    // dirección de mirada
-    const a = set.angle * D2R;
+    // Posición deseada: detrás y encima (en coche: distancia/altura; espectador: más lejos)
+    const dist = target ? set.dist : set.dist * 2.2;
+    const hgt = target ? set.height : set.height * 2.5;
+    tv.set(anchor[0] - dx * dist, anchor[1] - dy * dist, anchor[2] + hgt - cam.ly * dist * 0.5);
+    // Con la rigidez < 1, la cámara se retrasa un poco a gran velocidad (como un muelle)
+    if (!cam.init) { cam.p.copy(tv); cam.init = true; }
+    const follow = 1 - Math.exp(-dt * (6 + 60 * stiff * stiff));
+    cam.p.lerp(tv, follow);
+    // nunca más lejos de 1.6× la distancia ni dentro del coche
+    tv3.subVectors(cam.p, tv);
+    if (tv3.length() > dist * 0.6) cam.p.copy(tv).addScaledVector(tv3.normalize(), dist * 0.6);
+    keepInside(cam.p, 40);
+
+    // Dirección de mirada: coche → hacia delante con el ángulo elegido; balón → hacia el balón (inclinación limitada)
+    const a = (set.angle ?? -3) * D2R;
     tv2.set(dx * Math.cos(a), dy * Math.cos(a), Math.sin(a) + cam.ly * 0.4);
-    tv3.set(b[0] - tv.x, b[1] - tv.y, b[2] - tv.z).normalize();
-    const elev = clamp(Math.asin(tv3.z), -0.35, 0.8);
+    tv3.set(b[0] - cam.p.x, b[1] - cam.p.y, b[2] - cam.p.z).normalize();
+    const elev = clamp(Math.asin(clamp(tv3.z, -1, 1)), -0.45, 0.75);
     const hl2 = Math.hypot(tv3.x, tv3.y) || 1;
     tv3.set(tv3.x / hl2 * Math.cos(elev), tv3.y / hl2 * Math.cos(elev), Math.sin(elev));
-    if (target) tv2.lerp(tv3, cam.blend * (1 - lm)).normalize();
-    else tv2.lerp(tv3, 1 - lm).normalize();
-    // temblor (opcional)
+    const ballWeight = target ? cam.blend * (1 - lm) : 1 - lm;
+    tv2.lerp(tv3, ballWeight).normalize();
+    cam.look.lerp(tv2, 1 - Math.exp(-dt * 18)).normalize();
+
+    // Temblor (opcional)
     let jx = 0, jy = 0, jz = 0;
+    tv.copy(cam.p);
     if (set.shake) {
       if (me && me.ss) cam.shake = Math.max(cam.shake, 1.5);
       if (cam.shake > 0.05) {
@@ -1151,7 +1181,7 @@ export function createRenderer(canvas) {
     }
     cam.shake *= Math.exp(-dt * 5);
     camera.position.copy(tv);
-    camera.lookAt(tv.x + tv2.x * 1000 + jx, tv.y + tv2.y * 1000 + jy, tv.z + tv2.z * 1000 + jz);
+    camera.lookAt(tv.x + cam.look.x * 1000 + jx, tv.y + cam.look.y * 1000 + jy, tv.z + cam.look.z * 1000 + jz);
   }
 
   function setMenuFov() {

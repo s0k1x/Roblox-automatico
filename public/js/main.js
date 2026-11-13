@@ -1049,6 +1049,7 @@ function interpolated(dt) {
 
 // ---------- bucle ----------
 let last = performance.now();
+let cursorHidden = false;
 let selPrev = false;
 let fpsN = 0, fpsT = 0;
 function frame(now) {
@@ -1060,6 +1061,10 @@ function frame(now) {
     fpsN++; fpsT += dt;
     if (fpsT >= 0.5) { $('fps').textContent = Math.round(fpsN / fpsT) + ' FPS'; fpsN = 0; fpsT = 0; }
   }
+
+  // Ratón oculto mientras se juega (vuelve en menús y pausa)
+  const playingNow = mode !== 'menu' && !paused;
+  if (playingNow !== cursorHidden) { cursorHidden = playingNow; document.body.classList.toggle('jugando', playingNow); }
 
   if (mode === 'menu') {
     pollMenuPad(now);
