@@ -234,4 +234,27 @@ const mkM = () => { const G = new Game({ teamSize: 1 }); for (const c of G.cars)
   const yaw = Math.atan2(c.o.f[1], c.o.f[0]) * 180 / Math.PI;
   ok(Math.abs(yaw + 90) < 25 && c.o.u[2] > 0.8, `medio flip: orientación ${yaw.toFixed(0)}° (de 90° a -90°) y ruedas abajo (${c.o.u[2].toFixed(2)})`); }
 
+// Speed flip: salto, flip diagonal, cancelación y roll contrario → llega antes que solo con turbo y cae plano
+{
+  const runSF = (sf) => {
+    const G = mkM(); G.placeCar(G.cars[1], [-3500, 4500], 0); for (const pad of G.pads) pad.timer = 1e9;
+    const c = G.cars[0]; G.placeCar(c, [0, -4000], Math.PI / 2); c.boost = 100;
+    let hit = 9, up = 0, gr = false;
+    for (let i = 0; i < 360; i++) {
+      const t = i / 120; const inp = { throttle: 1, boost: true };
+      if (sf) {
+        if (t >= 0.7 && t < 0.73) inp.jump = true;
+        if (t >= 0.78 && t < 0.805) { inp.jump = true; inp.pitch = -1; inp.yaw = -0.7; }
+        if (t >= 0.805 && t < 1.13) inp.pitch = 1;
+        if (t >= 0.805 && !c.grounded) { inp.handbrake = true; inp.steer = 0.7; }
+      }
+      G.setInput(0, inp); G.step();
+      if (hit === 9 && c.pos[1] + 4000 >= 3500) { hit = t; up = c.o.u[2]; gr = c.grounded; }
+    }
+    return { hit, up, gr };
+  };
+  const nb = runSF(false), sf = runSF(true);
+  ok(sf.hit < nb.hit - 0.05 && sf.gr && sf.up > 0.95, `speed flip: 3500 uu en ${sf.hit.toFixed(3)} s frente a ${nb.hit.toFixed(3)} s solo turbo, cae plano (${sf.up.toFixed(2)})`);
+}
+
 process.exit(fails ? 1 : 0);
