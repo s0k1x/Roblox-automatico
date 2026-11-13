@@ -1216,7 +1216,13 @@ export function createRenderer(canvas) {
   // balón y sombras falsas (calcomanías, sin mapas de sombra)
   const ball = buildBall();
   scene.add(ball);
-  const shadowTex = radialTex('rgba(0,0,0,0.85)', 'rgba(0,0,0,0)');
+  // Sombra difusa: oscura en el centro y desvanecida de forma gradual (sin borde marcado)
+  const shadowTex = canvasTex(64, 64, (c, w, h) => {
+    const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(0,0,0,0.75)'); g.addColorStop(0.45, 'rgba(0,0,0,0.45)');
+    g.addColorStop(0.8, 'rgba(0,0,0,0.1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+  });
   const shadowGeo = new THREE.PlaneGeometry(1, 1);
   const newShadowMat = (op) => new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: op, depthWrite: false });
   const ballShadow = new THREE.Mesh(shadowGeo, newShadowMat(0.7));
@@ -1410,7 +1416,7 @@ export function createRenderer(canvas) {
     const fl = Math.hypot(f[0], f[1]) || 1;
     mesh.position.set(p[0] + f[0] / fl * hb.off[0], p[1] + f[1] / fl * hb.off[0], 1.2);
     mesh.rotation.z = yaw;
-    mesh.scale.set(hb.size[0] * 1.5, hb.size[1] * 1.45, 1);
+    mesh.scale.set(hb.size[0] * 1.3, hb.size[1] * 1.3, 1);
     mesh.material.opacity = op;
   }
 
@@ -1610,7 +1616,7 @@ export function createRenderer(canvas) {
         if (!vis) continue;
         setBasis(o.grp, c.f, c.u, c.p);
         o.label.position.set(c.p[0], c.p[1], c.p[2] + 85);
-        placeShadow(o.shadow, c.p, c.f, o.hbObj, 0.55 * Math.max(0.15, 1 - c.p[2] / 1500));
+        placeShadow(o.shadow, c.p, c.f, o.hbObj, 0.45 * Math.max(0.15, 1 - c.p[2] / 1500));
         // ruedas: giran según la velocidad hacia delante; las delanteras viran con el giro estimado
         const fwd = c.v[0] * c.f[0] + c.v[1] * c.f[1] + c.v[2] * c.f[2];
         if (dt > 0.002) {

@@ -239,7 +239,7 @@ function glowTexture() {
 function underglowMaterial(hex) {
   let m = _glowCache.get(hex);
   if (!m) {
-    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex), map: glowTexture(), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+    m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex), map: glowTexture(), transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
     _glowCache.set(hex, m);
   }
   return m;
@@ -314,7 +314,7 @@ export function glbBody(opts) {
   // luz bajo el coche con el color del equipo
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), underglowMaterial('#' + (mats.teamBase || mats.team.color).getHexString()));
   glow.position.set(off[0], 0, -14.5);
-  glow.scale.set(size[0] * 1.25, size[1] * 1.15, 1);
+  glow.scale.set(size[0] * 0.9, size[1] * 0.85, 1); // dentro de la sombra, para que no forme un aro
   glow.renderOrder = 2;
   group.add(glow);
   return {
