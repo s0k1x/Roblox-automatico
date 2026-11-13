@@ -95,11 +95,13 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
 .field{color:#b4c2e0;font-size:14px}
 .lbl small{text-transform:none;letter-spacing:0;color:#9fb0d2;font-size:12px}
 .seg button{min-height:46px}
-.seg button.on,#hb-list button.on{border-color:var(--neon);background:#12304a;box-shadow:0 0 10px #39f3c844 inset;font-weight:700}
+.seg button.on,#hb-list button.on,#fx-list button.on{border-color:var(--neon);background:#12304a;box-shadow:0 0 10px #39f3c844 inset;font-weight:700}
 .seg.tabs{flex-wrap:wrap;margin-bottom:12px}
 .seg.tabs button{flex:1 1 auto;min-height:40px;padding:8px 10px}
 #hb-list{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-#hb-list button{padding:8px 4px;font-size:14px;line-height:1.3}
+#hb-list button,#fx-list button{padding:8px 4px;font-size:14px;line-height:1.3}
+#fx-list{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+#fx-list small{display:block;color:#9fb0d2;font-size:11px;margin-top:2px}
 #hb-list small{display:block;color:#9fb0d2;font-size:11px;margin-top:2px}
 .prow .lbl{margin:12px 0 5px}
 .sws{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
@@ -132,6 +134,7 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--neon)}
   .hints{display:none}
   .card{padding:12px 16px 12px 20px}.card b{font-size:19px}.card span{font-size:13px}
   #hb-list{grid-template-columns:repeat(2,1fr)}
+  #fx-list{grid-template-columns:repeat(2,1fr)}
   #stats{grid-template-columns:repeat(2,1fr)}
   .s{grid-template-columns:96px 1fr 50px}
 }
@@ -259,11 +262,11 @@ body.tc-touch #speed{right:auto;bottom:auto;left:calc(92px + env(safe-area-inset
 #chat-menu div{padding:2px 0}
 #chat-menu kbd{margin-right:8px}
 /* Marcador de partida (mantener Tab) */
-#tab-board{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,92vw);background:#060a14d8;border:1px solid var(--line);border-radius:14px;padding:12px 16px;backdrop-filter:blur(4px)}
+#tab-board{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,94vw);background:#060a14d8;border:1px solid var(--line);border-radius:14px;padding:12px 16px;backdrop-filter:blur(4px)}
 #tab-board .tb-head{display:flex;justify-content:center;align-items:center;gap:18px;font-weight:900;font-size:30px;margin-bottom:8px}
 #tab-board .tb-head small{font-size:16px;color:var(--dim)}
 #tab-board .tb-head .b{color:#8cc4ff}#tab-board .tb-head .o{color:#ffc58a}
-#tab-board table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:6px}
+#tab-board table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px}
 #tab-board th{color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase;text-align:center;padding:3px 4px}
 #tab-board td{text-align:center;padding:4px;border-top:1px solid #ffffff12}
 #tab-board th:first-child,#tab-board td:first-child{text-align:left}
@@ -274,3 +277,26 @@ body.tc-touch #speed{right:auto;bottom:auto;left:calc(92px + env(safe-area-inset
 
 /* Durante la partida no se ve el puntero del ratón */
 body.jugando, body.jugando canvas { cursor: none; }
+
+/* Avisos largos del banner (p. ej. «¡GOL de NOMBRE!») */
+#banner.long{font-size:clamp(28px,6vw,68px)}
+/* Rótulos de jugada propia: se apilan bajo el centro y se apagan solos en 2,5 s */
+#plays{position:absolute;left:50%;top:60%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
+.play{--c:#39f3c8;position:relative;display:flex;align-items:center;gap:12px;padding:6px 20px 8px 14px;background:linear-gradient(90deg,#060a14e6,#0b1426cc);border-left:5px solid var(--c);transform:skewX(-10deg);box-shadow:0 0 18px color-mix(in srgb,var(--c) 35%,transparent);animation:playin 2.5s ease-out forwards;overflow:hidden}
+.play b{font-size:clamp(16px,2.2vw,24px);letter-spacing:.1em;text-transform:uppercase;font-weight:800;transform:skewX(10deg)}
+.play em{font-style:normal;font-weight:900;font-size:clamp(16px,2.2vw,24px);color:var(--c);transform:skewX(10deg);font-variant-numeric:tabular-nums}
+.play u{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--c);transform-origin:left;animation:playbar 2.5s linear forwards}
+.play.k-goal b,.play.k-goal em{font-size:clamp(20px,3vw,32px)}
+@keyframes playin{0%{opacity:0;transform:skewX(-10deg) translateY(14px) scale(.9)}10%{opacity:1;transform:skewX(-10deg) scale(1.04)}16%{transform:skewX(-10deg) scale(1)}80%{opacity:1}100%{opacity:0;transform:skewX(-10deg) translateY(-10px)}}
+@keyframes playbar{to{transform:scaleX(0)}}
+#chat-log .msg.note{font-size:12px;padding:3px 8px;opacity:.9;color:#c8d6f2}
+/* Repetición del gol */
+#replay .bar{position:absolute;left:0;right:0;height:11%;background:linear-gradient(#000e,#000a);display:flex;align-items:center;justify-content:center;gap:18px}
+#replay .bar.top{top:0;justify-content:flex-start;padding-left:4vw}
+#replay .bar.bot{bottom:0;flex-direction:column;gap:2px;background:linear-gradient(#000a,#000e)}
+#replay .tag{font-weight:900;letter-spacing:.3em;font-size:clamp(16px,2.4vw,28px);display:flex;align-items:center;gap:12px}
+#replay .tag i{width:12px;height:12px;border-radius:50%;background:#ff4d6d;box-shadow:0 0 10px #ff4d6d;animation:recblink 1s steps(2) infinite}
+@keyframes recblink{50%{opacity:.2}}
+#replay-who{font-size:clamp(16px,2.4vw,28px);font-weight:700}
+#replay-skip{color:var(--dim);font-size:clamp(11px,1.3vw,14px)}
+#hud.replaying #speed,#hud.replaying #boost,#hud.replaying #plays,#hud.replaying #chat-log{display:none}

@@ -1289,6 +1289,160 @@ export function createRenderer(canvas) {
     }
   }
 
+  // ---------- estela del balón (una sola cinta dinámica, en la escena de efectos) ----------
+  const TR_N = 26;
+  const trGeo = new THREE.BufferGeometry();
+  const trPos = new Float32Array(TR_N * 6), trCol = new Float32Array(TR_N * 6);
+  trGeo.setAttribute('position', new THREE.BufferAttribute(trPos, 3).setUsage(THREE.DynamicDrawUsage));
+  trGeo.setAttribute('color', new THREE.BufferAttribute(trCol, 3).setUsage(THREE.DynamicDrawUsage));
+  {
+    const idx = [];
+    for (let i = 0; i < TR_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    trGeo.setIndex(idx);
+  }
+  const trMesh = new THREE.Mesh(trGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  trMesh.frustumCulled = false; trMesh.renderOrder = 9; trMesh.visible = false;
+  fxScene.add(trMesh);
+  const trHist = []; // más reciente primero: [x, y, z, edad]
+  const trCol3 = new THREE.Color(1, 1, 1);
+  let trK = 0, trSince = 0;
+  function resetTrail() { trHist.length = 0; trK = 0; trMesh.visible = false; }
+  function updateTrail(state, dt) {
+    const bv = state.ball.v;
+    const sp = bv ? Math.hypot(bv[0], bv[1], bv[2]) : 0;
+    const want = clamp((sp - 2000) / 2200, 0, 1);
+    trK += (want - trK) * (1 - Math.exp(-dt * (want > trK ? 12 : 5)));
+    const life = quality === 'baja' ? 0.28 : 0.5, maxN = quality === 'baja' ? 10 : TR_N;
+    for (let i = trHist.length - 1; i >= 0; i--) { trHist[i][3] += dt; if (trHist[i][3] > life) trHist.length = i; }
+    const bp = state.ball.p;
+    if (trHist.length && Math.hypot(bp[0] - trHist[0][0], bp[1] - trHist[0][1], bp[2] - trHist[0][2]) > 1500) trHist.length = 0; // salto (saque, repetición)
+    trSince += dt;
+    if (want > 0.02 && trSince >= 0.012) {
+      trSince = 0;
+      trHist.unshift([bp[0], bp[1], bp[2], 0]);
+      if (trHist.length > maxN) trHist.length = maxN;
+    }
+    const n = trHist.length;
+    if (n < 2 || trK < 0.03) { trMesh.visible = false; return; }
+    const lt = state.lastTouch;
+    const lc = lt !== null && lt !== undefined ? state.cars.find((c) => c.id === lt) : null;
+    if (lc) trCol3.set(teamHex(lc.team)); else trCol3.setRGB(0.7, 0.85, 1);
+    const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+    for (let i = 0; i < n; i++) {
+      const h = trHist[i], pr = trHist[Math.max(0, i - 1)], nx = trHist[Math.min(n - 1, i + 1)];
+      let tx = pr[0] - nx[0], ty = pr[1] - nx[1], tz = pr[2] - nx[2];
+      const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+      const wx = cx - h[0], wy = cy - h[1], wz = cz - h[2];
+      let sx = ty * wz - tz * wy, sy = tz * wx - tx * wz, sz = tx * wy - ty * wx;
+      const sl = Math.hypot(sx, sy, sz) || 1;
+      const f = 1 - h[3] / life;
+      const w = BALL_R * 0.8 * f * (0.5 + 0.5 * trK) / sl;
+      sx *= w; sy *= w; sz *= w;
+      const o = i * 6;
+      trPos[o] = h[0] + sx; trPos[o + 1] = h[1] + sy; trPos[o + 2] = h[2] + sz;
+      trPos[o + 3] = h[0] - sx; trPos[o + 4] = h[1] - sy; trPos[o + 5] = h[2] - sz;
+      const a = f * f * trK * 1.7, wh = f * f * f * 0.5;
+      const r = (trCol3.r + wh) * a, g = (trCol3.g + wh) * a, b = (trCol3.b + wh) * a;
+      trCol[o] = trCol[o + 3] = r; trCol[o + 1] = trCol[o + 4] = g; trCol[o + 2] = trCol[o + 5] = b;
+    }
+    trGeo.attributes.position.needsUpdate = true; trGeo.attributes.color.needsUpdate = true;
+    trGeo.setDrawRange(0, (n - 1) * 6);
+    trMesh.visible = true;
+  }
+
+  // ---------- explosiones de gol (5 efectos propios, solo partículas) ----------
+  const fxQ = [];
+  const fxLater = (delay, fn) => fxQ.push({ t: delay, fn });
+  function fxTick(dt) {
+    for (let i = fxQ.length - 1; i >= 0; i--) { const q = fxQ[i]; q.t -= dt; if (q.t <= 0) { fxQ.splice(i, 1); q.fn(); } }
+  }
+  const fxN = (k) => Math.max(2, Math.round(k * qf));
+  const WHITE = [1, 1, 1];
+  // id 0..4; pos = sitio del gol; sc = escala (1 = partido, <1 = vista previa en el garaje)
+  function goalFx(id, pos, team, sc = 1) {
+    const c = new THREE.Color(teamHex(team || 0));
+    const tc = [c.r, c.g, c.b], lt = [c.r * 0.55 + 0.45, c.g * 0.55 + 0.45, c.b * 0.55 + 0.45];
+    const sz = sc < 1 ? 0.3 + 0.7 * sc : 1;
+    const P = [pos[0], pos[1], Math.max(pos[2], 120 * sc)];
+    const at = (dx, dy, dz) => [P[0] + dx * sc, P[1] + dy * sc, P[2] + dz * sc];
+    const em = (p, v, lf, s, col) => particles.emit(p, [v[0] * sc, v[1] * sc, v[2] * sc], lf, s * sz, col[0], col[1], col[2]);
+    const side = pos[1] > 0 ? 1 : -1;
+    if (id === 1) { // Nova: anillos planos que se expanden y una columna de luz
+      em(P, [0, 0, 0], 0.3, 700, WHITE);
+      for (let r = 0; r < 3; r++) fxLater(r * 0.14, () => {
+        const n = fxN(60), v = 1300 + r * 600;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + r * 0.3;
+          em(P, [Math.cos(a) * v, Math.sin(a) * v, 120 + r * 60], 1.0, 62 - r * 8, r === 1 ? lt : r === 2 ? WHITE : tc);
+        }
+      });
+      const n = fxN(36);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * 6.28, d = Math.random() * 120;
+        em(at(Math.cos(a) * d, Math.sin(a) * d, 0), [Math.cos(a) * 60, Math.sin(a) * 60, 900 + Math.random() * 1500], 0.9 + Math.random() * 0.6, 70, i % 3 ? tc : WHITE);
+      }
+    } else if (id === 2) { // Confeti: lluvia de papelitos de colores
+      const pal = [tc, lt, WHITE, [1, 0.82, 0.25], [1, 0.45, 0.75], [0.35, 1, 0.75], [0.6, 0.5, 1]];
+      for (let w = 0; w < 3; w++) fxLater(w * 0.18, () => {
+        const n = fxN(80);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * 6.28, hv = Math.random() * 900;
+          em(at(rnd() * 200, rnd() * 200, 0), [Math.cos(a) * hv, Math.sin(a) * hv, 700 + Math.random() * 1700 - w * 250], 1.5 + Math.random() * 1.1, 22 + Math.random() * 16, pal[(Math.random() * pal.length) | 0]);
+        }
+      });
+    } else if (id === 3) { // Relámpago: rayos en zigzag que caen sobre la portería
+      const bolt = (col) => {
+        let x = P[0] + rnd() * 500 * sc, y = P[1] + rnd() * 300 * sc, z = P[2] + 2100 * sc;
+        const segs = 12;
+        for (let s = 0; s < segs; s++) {
+          const f = (s + 1) / segs;
+          const nx = P[0] + (x - P[0]) * (1 - f) * 0.9 + rnd() * 160 * sc, ny = P[1] + (y - P[1]) * (1 - f) * 0.9 + rnd() * 160 * sc, nz = P[2] + (z - P[2]) * (1 - f);
+          for (let k = 0; k < 3; k++) {
+            const t = k / 3;
+            particles.emit([x + (nx - x) * t, y + (ny - y) * t, z + (nz - z) * t], [0, 0, 0], 0.16 + Math.random() * 0.14, 62 * sz, col[0], col[1], col[2]);
+          }
+          x = nx; y = ny; z = nz;
+        }
+      };
+      em(P, [0, 0, 0], 0.35, 800, lt);
+      for (let b = 0; b < 3; b++) fxLater(b * 0.1, () => {
+        const reps = fxN(4);
+        for (let k = 0; k < reps; k++) bolt(k % 2 ? WHITE : lt);
+        const n = fxN(40);
+        for (let i = 0; i < n; i++) { tv.set(rnd(), rnd(), Math.abs(rnd())).normalize(); const v = 500 + Math.random() * 1400; em(P, [tv.x * v, tv.y * v, tv.z * v], 0.4 + Math.random() * 0.4, 36, i % 2 ? WHITE : tc); }
+      });
+    } else if (id === 4) { // Aurora: cortinas ondulantes de luz que suben
+      for (let w = 0; w < 5; w++) fxLater(w * 0.22, () => {
+        const cols = fxN(22);
+        for (let i = 0; i < cols; i++) {
+          const f = i / (cols - 1), x = (f - 0.5) * 3000, off = Math.sin(f * 7 + w * 1.1) * 260;
+          for (let k = 0; k < 3; k++) {
+            const h = Math.random();
+            const col = h < 0.35 ? [0.25, 1, 0.7] : h < 0.7 ? lt : [0.65, 0.45, 1];
+            em(at(x, -side * 120 + off, 80 + h * 700), [rnd() * 30, rnd() * 30, 220 + Math.random() * 380], 1.6 + Math.random() * 0.9, 95, col);
+          }
+        }
+      });
+      em(P, [0, 0, 0], 0.4, 600, [0.4, 1, 0.8]);
+    } else { // 0 Estallido: esfera de chispas y un aro en la boca de la portería
+      em(P, [0, 0, 0], 0.25, 650, WHITE);
+      burst2(P, fxN(200), [tc, WHITE, lt], 500 * sc, 2100 * sc, 0.7, 1.6, 45 * sz, 110 * sz);
+      const n = fxN(52);
+      for (let i = 0; i < n; i++) { const a = (i / n) * 6.28; em(P, [Math.cos(a) * 1900, 0, Math.sin(a) * 1900 * 0.8 + 200], 0.6, 56, lt); }
+      burst2(P, fxN(50), [[1, 0.9, 0.5]], 100 * sc, 700 * sc, 0.4, 0.9, 120 * sz, 220 * sz);
+    }
+  }
+  function burst2(p, n, colors, vmin, vmax, lmin, lmax, smin, smax) { // como burst, pero sin escalar por calidad (ya viene escalado)
+    for (let i = 0; i < n; i++) {
+      tv.set(rnd(), rnd(), rnd()).normalize();
+      const v = vmin + Math.random() * (vmax - vmin);
+      const c = colors[(Math.random() * colors.length) | 0];
+      particles.emit(p, [tv.x * v, tv.y * v, tv.z * v], lmin + Math.random() * (lmax - lmin), smin + Math.random() * (smax - smin), c[0], c[1], c[2]);
+    }
+  }
+  let fxPreviewReq = null;
+  let ovOn = false;
+
   // Mantiene la cámara dentro de la planta octogonal.
   const PLAN_SUM = HX + HY - CORNER - 60;
   function clampPlan(v) {
@@ -1475,7 +1629,9 @@ export function createRenderer(canvas) {
         particles.emit(q, [-f[0] * 260 + rnd() * 50, -f[1] * 260 + rnd() * 50, rnd() * 50], 0.4 + Math.random() * 0.2, hot ? 20 : 28, c[0], c[1], c[2]);
       }
     }
+    if (garage && fxPreviewReq !== null) { goalFx(fxPreviewReq, [C[0], C[1], C[2] + 70], 0, 0.14); fxPreviewReq = null; }
     surroundings.setJump(0, 0);
+    fxTick(dt);
     particles.update(dt);
     drawFrame(dt);
   }
@@ -1491,6 +1647,8 @@ export function createRenderer(canvas) {
       look.y = clamp(+y || 0, -1, 1);
     },
     setBallCam(v) { ballCam = !!v; },
+    previewGoalFx(id) { fxPreviewReq = clamp(id | 0, 0, 4); },
+    resetTrail,
     setShowNames(v) { showNames = !!v; },
     setShowHitbox(v) { showHitbox = !!v; },
     setMap,
@@ -1525,9 +1683,7 @@ export function createRenderer(canvas) {
       if (!events) return;
       for (const e of events) {
         if (e.type === 'goal' && e.pos) {
-          const c = new THREE.Color(teamHex(e.team));
-          burst(e.pos, 240, [[c.r, c.g, c.b], [1, 1, 1], [c.r * 0.6 + 0.4, c.g * 0.6 + 0.4, c.b * 0.6 + 0.4]], 500, 2000, 0.8, 1.8, 45, 110);
-          burst(e.pos, 60, [[1, 0.9, 0.5]], 100, 700, 0.4, 0.9, 120, 220);
+          goalFx(e.fx | 0, e.pos, e.team);
           crowdAmp = 22; crowdT = 0;
           if (camSettings.shake) cam.shake = Math.max(cam.shake, 14);
         } else if (e.type === 'demo' && e.pos) {
@@ -1544,7 +1700,7 @@ export function createRenderer(canvas) {
         }
       }
     },
-    render(state, myCarId, dtFrame) {
+    render(state, myCarId, dtFrame, camOv) {
       if (state && state.map && state.map !== mapId) setMap(state.map);
       if (theme && theme.update) theme.update(dtFrame || 0);
       const dt = Math.min(0.1, Math.max(0.0001, dtFrame || 0.016));
@@ -1662,7 +1818,20 @@ export function createRenderer(canvas) {
       for (const [id, o] of cars) {
         if (!seen.has(id)) { scene.remove(o.grp, o.label, o.shadow); cars.delete(id); }
       }
-      updateCamera(state, me, dt);
+      if (camOv) { // cámara de repetición
+        if (Math.abs(camera.fov - camOv.fov) > 0.01) {
+          camera.fov = camOv.fov; camera.updateProjectionMatrix();
+          particles.mat.uniforms.uScale.value = renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan(camera.fov * D2R / 2));
+        }
+        camera.position.set(camOv.p[0], camOv.p[1], camOv.p[2]);
+        camera.lookAt(camOv.l[0], camOv.l[1], camOv.l[2]);
+        ovOn = true;
+      } else {
+        if (ovOn) { ovOn = false; cam.init = false; updateFov(); resetTrail(); }
+        updateCamera(state, me, dt);
+      }
+      updateTrail(state, dt);
+      fxTick(dt);
       particles.update(dt);
       drawFrame(dtFrame || dt);
     },

@@ -46,6 +46,7 @@
   <div id="chat-menu" class="hidden"></div>
   <div id="tab-board" class="hidden"></div>
   <div id="countdown"></div>
+  <div id="plays"></div>
   <div id="banner"></div>
   <div id="sub-banner"></div>
   <div id="speed"><b id="speed-val">0</b><small>km/h</small></div>
@@ -57,13 +58,17 @@
     <span id="boost-val">33</span>
   </div>
   <div id="conn" class="hidden">Conexión perdida</div>
+  <div id="replay" class="hidden">
+    <div class="bar top"><span class="tag"><i></i>REPETICIÓN</span></div>
+    <div class="bar bot"><span id="replay-who"></span><small id="replay-skip">Pulsa Espacio o Intro para saltar</small></div>
+  </div>
 </div>
 
 <div id="endscreen" class="overlay hidden">
   <div class="panel">
     <h2 id="end-title">Fin del partido</h2>
     <div id="end-score"></div>
-    <table id="end-table"><thead><tr><th>Jugador</th><th>Goles</th><th>Paradas</th><th>Tiros</th><th>Demos</th></tr></thead><tbody></tbody></table>
+    <table id="end-table"><thead><tr><th>Jugador</th><th>Goles</th><th>Paradas</th><th>Tiros</th><th>Demos</th><th>Asist.</th><th>Despejes</th></tr></thead><tbody></tbody></table>
     <div class="row"><button id="btn-rematch" class="primary">Revancha</button><button id="btn-end-menu">Menú</button></div>
   </div>
 </div>
@@ -162,6 +167,8 @@
         <div class="lbl">Carrocería <small>(largo × ancho × alto, en uu)</small></div>
         <div id="hb-list"></div>
         <div id="paint-rows"></div>
+        <div class="lbl">Explosión de gol <small>(púlsala para ver una vista previa)</small></div>
+        <div id="fx-list"></div>
         <p class="note">Se añade siempre una franja con el color de tu equipo para que te reconozcan.</p>
         <div class="row"><button id="btn-paint-reset" type="button">Restablecer colores</button></div>
       </section>

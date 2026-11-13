@@ -1,5 +1,6 @@
 import { Game, sanitizeInput } from '../shared/sim.js';
 import { HITBOXES, TEAM_COLORS, TEAM_NAMES, DT } from '../shared/constants.js';
+import { ARENA } from '../shared/arena.js';
 import { hostRoom, joinRoom } from './net.js';
 import { createInput } from './input.js';
 import { createRenderer } from './render.js';
@@ -26,7 +27,7 @@ const CAM_PRESETS = {
 };
 // En móvil se empieza en calidad baja; en el resto, automática.
 const IS_MOBILE = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
-const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', ...CAM_PRESETS.default, ballcamDefault: false,
+const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', ...CAM_PRESETS.default, ballcamDefault: false, goalFx: 0,
   camPreset: 'default', shake: true, swivel: 5, transition: 1, invertLook: false,
   rumble: true, showNames: true, stickSens: 100,
   botLevel: 1, map: 'clasico', infBoost: false, quality: IS_MOBILE ? 'baja' : 'auto', fpsLimit: 0, showFps: false,
@@ -38,6 +39,7 @@ const DEFAULTS = { name: '', teamSize: 1, hitbox: 'estandar', ...CAM_PRESETS.def
 let cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('balonturbo') || '{}')); } catch (e) { /* sin almacenamiento */ }
 cfg.paint = { ...DEFAULTS.paint, ...(cfg.paint || {}) };
+if (!Number.isInteger(cfg.goalFx) || cfg.goalFx < 0 || cfg.goalFx > 4) cfg.goalFx = 0;
 cfg.stats = { ...DEFAULTS.stats, ...(cfg.stats || {}) };
 cfg.challenges = { week: '', prog: {}, ...(cfg.challenges || {}) };
 function save() { try { localStorage.setItem('balonturbo', JSON.stringify(cfg)); } catch (e) { /* ignorar */ } }
@@ -235,6 +237,17 @@ for (const h of HITBOXES) {
   hbList.appendChild(b);
 }
 
+// Explosiones de gol (garaje): se elige una y se ve una vista previa en el coche de la vitrina
+const GOAL_FX = [['Estallido', 'Chispas en esfera'], ['Nova', 'Anillos de luz'], ['Confeti', 'Lluvia de colores'], ['Relámpago', 'Rayos sobre la red'], ['Aurora', 'Cortinas de luz']];
+const fxList = $('fx-list');
+GOAL_FX.forEach(([name, desc], i) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.dataset.id = String(i);
+  b.innerHTML = `${name}<small>${desc}</small>`;
+  b.addEventListener('click', () => { cfg.goalFx = i; save(); markSel(); R('previewGoalFx', i); });
+  fxList.appendChild(b);
+});
+
 // Pintura (garaje)
 const SWATCHES = ['#2fd6b5', '#e8f0ff', '#ff4d6d', '#ffd166', '#7b5cff', '#2f8cff', '#ff8a1f', '#9bff57', '#ff6fb5', '#14213d', '#5b6478', '#0b0d12'];
 const PAINT_ROWS = [['a', 'Color principal'], ['b', 'Color secundario'], ['w', 'Llantas'], ['t', 'Estela de turbo']];
@@ -261,6 +274,7 @@ $('btn-paint-reset').addEventListener('click', () => { cfg.paint = { ...DEFAULTS
 
 function markSel() {
   for (const b of hbList.children) b.classList.toggle('on', b.dataset.id === cfg.hitbox);
+  for (const b of fxList.children) b.classList.toggle('on', b.dataset.id === String(cfg.goalFx));
   for (const seg of document.querySelectorAll('.seg[data-key]')) {
     for (const b of seg.children) b.classList.toggle('on', String(cfg[seg.dataset.key]) === b.dataset.v);
   }
@@ -495,6 +509,7 @@ let pendingEvents = [];
 let ws = null; // conexión del invitado con el anfitrión
 let host = null; // sala propia (anfitrión)
 let hostHumans = new Map(); // peerId -> carId
+const carFx = new Map(); // carId -> explosión de gol elegida (anfitrión; los bots tienen una fija al azar)
 let netEvents = [];
 let tickCount = 0;
 let myCarId = 0;
@@ -505,7 +520,7 @@ let lastSent = 0;
 let latest = null;
 let hudState = { ended: false, goFlash: 0, banner: 0 };
 let ballCam = false;
-let padSt9 = true, camHeldPrev = false;
+let padSt9 = true, camHeldPrev = false, padAPrev = true;
 let showHit = false;
 
 function show(id, v) { $(id).classList.toggle('hidden', !v); }
@@ -603,7 +618,25 @@ function rumble(strong, weak, ms) {
     if (r && r.catch) r.catch(() => {});
   } catch (e) { /* sin vibración */ }
 }
+// Explosión de gol de un coche: la elegida por su dueño (en online llega en el estado difundido)
+function fxOf(id, s) {
+  if (id === null || id === undefined) return 0;
+  if (s && s.fx && Number.isInteger(s.fx[id]) && s.fx[id] >= 0 && s.fx[id] <= 4) return s.fx[id];
+  if (mode === 'online') return 0;
+  if (id === myCarId) return cfg.goalFx;
+  let f = carFx.get(id);
+  if (f === undefined) { f = Math.floor(Math.random() * 5); carFx.set(id, f); }
+  return f;
+}
 function onEvents(events, s) {
+  for (const e of events) {
+    if (e.type !== 'goal') continue;
+    e.fx = fxOf(e.scorer, s);
+    if (!s.freePlay && !training) { // repetición: tras 0,8 s de celebración
+      replay.pending = true; replay.wait = 0.8; replay.goalT = s.t; replay.goal = e;
+      replay.who = e.scorer !== null && e.scorer !== undefined ? carName(s, e.scorer) : '';
+    }
+  }
   renderer.handleEvents(events, s);
   audio.events(events, s, myCarId);
   handleHudEvents(events, s);
@@ -633,12 +666,14 @@ function enterGame(m) {
   $('banner').classList.remove('show'); $('sub-banner').textContent = '';
   input.reset();
   closeChatMenu(); chatSpam.clear(); $('chat-log').innerHTML = ''; camHeldPrev = false;
+  $('plays').innerHTML = ''; kickDone = true; replayStop(); rec.length = 0; recLast = -1;
 }
 
 function toMenu(message) {
   if (ws) { try { ws.close(); } catch (e) { /* nada */ } ws = null; }
   if (host) { try { host.close(); } catch (e) { /* nada */ } host = null; hostHumans.clear(); }
   mode = 'menu'; game = null; latest = null; snaps = []; paused = false;
+  replayStop(); rec.length = 0; recLast = -1;
   applyAudio(); audio.menu(true); R('setMap', cfg.map);
   show('menu', true); show('hud', false); show('pause', false); show('endscreen', false);
   msg(message);
@@ -676,7 +711,7 @@ async function startHost() {
   msg('Creando sala…');
   game = new Game({ teamSize: cfg.teamSize, map: cfg.map });
   game.setHuman(0, playerName(), cfg.hitbox, cfg.paint);
-  myCarId = 0; acc = 0; pendingEvents = []; netEvents = []; tickCount = 0; hostHumans.clear();
+  myCarId = 0; acc = 0; pendingEvents = []; netEvents = []; tickCount = 0; hostHumans.clear(); carFx.clear();
   try {
     host = await hostRoom({
       onJoin(peerId, m) {
@@ -686,6 +721,7 @@ async function startHost() {
         const hb = typeof m.hitbox === 'string' ? m.hitbox : 'estandar';
         game.setHuman(carId, String(m.name || 'Jugador').slice(0, 16), hb, m.paint);
         hostHumans.set(peerId, carId);
+        carFx.set(carId, Number.isInteger(m.goalFx) && m.goalFx >= 0 && m.goalFx <= 4 ? m.goalFx : 0);
         banner(`${game.cars[carId].name} se ha unido`, '', '#39f3c8', 2, 0);
         return { type: 'welcome', room: host ? host.code : '', carId, teamSize: game.teamSize };
       },
@@ -705,7 +741,7 @@ async function startHost() {
         hostHumans.delete(peerId);
         if (carId !== undefined && game) {
           const name = game.cars[carId].name;
-          game.setBot(carId);
+          game.setBot(carId); carFx.delete(carId);
           banner(`${name} se ha ido`, 'Su coche lo lleva un bot', '#ffb347', 2, 0);
         }
       },
@@ -728,7 +764,7 @@ async function startOnline(code) {
   snaps = []; latest = null; roomCode = ''; resetPrediction(); seqNo = 0;
   let conn;
   try {
-    conn = await joinRoom(code, { type: 'join', name: playerName(), hitbox: cfg.hitbox, paint: cfg.paint }, {
+    conn = await joinRoom(code, { type: 'join', name: playerName(), hitbox: cfg.hitbox, paint: cfg.paint, goalFx: cfg.goalFx }, {
       onMessage(m) {
         if (m.type === 'welcome') {
           myCarId = m.carId; roomCode = m.room;
@@ -740,6 +776,7 @@ async function startOnline(code) {
           latest = s;
           reconcile(s);
           snaps.push(s);
+          recordState(s);
           if (snaps.length > 80) snaps.shift();
           if (s.events && s.events.length) onEvents(s.events, s);
         } else if (m.type === 'chat') {
@@ -805,19 +842,72 @@ function banner(text, sub, color, secs, prio) {
   if (bannerTimer > 0 && prio < bannerPrio) return;
   bannerPrio = prio; bannerTimer = secs;
   const b = $('banner');
-  b.textContent = text; b.style.color = color || '#fff'; b.classList.add('show');
+  b.textContent = text; b.style.color = color || '#fff'; b.classList.add('show'); b.classList.toggle('long', text.length > 9);
   $('sub-banner').textContent = sub || '';
 }
 function carName(s, id) { const c = s.cars.find((x) => x.id === id); return c ? c.name : ''; }
+// Rótulos de jugada propia: nombre de la acción y puntos
+const PLAYS = { goal: ['Gol', 100], assist: ['Asistencia', 50], save: ['Parada', 50], shot: ['Tiro a puerta', 20], clear: ['Despeje', 20], demo: ['Demolición', 25], touch: ['Primer toque', 2] };
+let kickDone = true; // ya se ha dado el primer toque tras el saque
+function playLabel(kind, team) {
+  const [name, pts] = PLAYS[kind];
+  const box = $('plays');
+  const d = document.createElement('div');
+  d.className = 'play k-' + kind;
+  d.style.setProperty('--c', kind === 'touch' ? '#9fb0d2' : TEAM_COLORS[team] || '#39f3c8');
+  d.innerHTML = `<b>${name}</b><em>+${pts}</em><u></u>`;
+  box.appendChild(d);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => d.remove(), 2500);
+  if (kind !== 'touch') audio.ui('play', pts);
+}
+// Aviso pequeño en el registro lateral (eventos de otros jugadores)
+function logNote(text, team) {
+  const d = document.createElement('div');
+  d.className = 'msg note';
+  d.style.borderLeftColor = TEAM_COLORS[team] || '#39f3c8';
+  d.textContent = text;
+  const log = $('chat-log');
+  log.appendChild(d);
+  while (log.children.length > 6) log.firstChild.remove();
+  setTimeout(() => d.remove(), 5000);
+}
 function handleHudEvents(events, s) {
+  const meCar = s.cars.find((x) => x.id === myCarId);
+  const myTeam = meCar ? meCar.team : 0;
+  const nm = (id) => carName(s, id) || 'Alguien';
   for (const e of events) {
+    // --- rótulos propios / avisos del registro ---
+    if (e.type === 'touch') {
+      if (!kickDone) { kickDone = true; if (e.car === myCarId && !training) playLabel('touch', myTeam); }
+    } else if (e.type === 'shot' || e.type === 'clear') {
+      if (e.car === myCarId) playLabel(e.type, myTeam);
+    } else if (e.type === 'save') {
+      if (e.car === myCarId) playLabel('save', myTeam);
+      else logNote(`${nm(e.car)} hizo una parada`, (s.cars.find((x) => x.id === e.car) || {}).team);
+    } else if (e.type === 'assist') {
+      if (e.car === myCarId) playLabel('assist', myTeam);
+    } else if (e.type === 'demo') {
+      if (e.attacker === myCarId) playLabel('demo', myTeam);
+      else logNote(`${nm(e.attacker)} demolió a ${nm(e.victim)}`, (s.cars.find((x) => x.id === e.attacker) || {}).team);
+    }
+    // --- avisos grandes ---
     if (e.type === 'goal' && training) {
       trainGoals++; $('train-goals').textContent = String(trainGoals);
       banner('¡GOL!', `${e.speed} km/h`, TEAM_COLORS[0], 2, 3);
+      if (e.scorer === myCarId) playLabel('goal', 0);
     } else if (e.type === 'goal') {
-      const who = e.scorer !== null && e.scorer !== undefined ? carName(s, e.scorer) : '';
-      banner('¡GOL!', `${who ? who + ' · ' : ''}${e.own ? 'en propia puerta · ' : ''}${e.speed} km/h`, TEAM_COLORS[e.team], 3, 3);
+      const hasScorer = e.scorer !== null && e.scorer !== undefined;
+      const who = hasScorer ? nm(e.scorer) : '';
+      const as = e.assist !== null && e.assist !== undefined ? nm(e.assist) : '';
+      banner(who ? `¡GOL de ${who}!` : '¡GOL!', `${e.own ? 'en propia puerta · ' : ''}${e.speed} km/h${as ? ' · asistencia de ' + as : ''}`, TEAM_COLORS[e.team], 3, 3);
+      if (hasScorer && e.scorer === myCarId && !e.own) playLabel('goal', myTeam);
+      if (hasScorer) logNote(`${who} marcó${e.own ? ' en propia puerta' : ''}${as ? ' · asistencia de ' + as : ''}`, e.team);
       if (!e.own) botChat(e.team, 4, 0.25);
+      kickDone = true;
+    } else if (e.type === 'time') {
+      banner(e.left === 60 ? '¡Último minuto!' : '¡Quedan 30 segundos!', 'Cada jugada cuenta', '#ffd24a', 2.4, 2);
+      audio.ui('warn');
     } else if (e.type === 'demo') {
       banner('DEMOLICIÓN', `${carName(s, e.attacker)} ➜ ${carName(s, e.victim)}`, '#ff5a5a', 1.6, 1);
     } else if (e.type === 'save') {
@@ -825,9 +915,10 @@ function handleHudEvents(events, s) {
       const sc = s.cars.find((x) => x.id === e.car);
       if (sc) botChat(sc.team, 6, 0.3);
     } else if (e.type === 'overtime') {
-      banner('PRÓRROGA', 'El próximo gol gana', '#ffd24a', 2.8, 2);
+      banner('¡Prórroga!', 'El próximo gol gana', '#ffd24a', 2.8, 2);
+      audio.ui('ot');
     } else if (e.type === 'go') {
-      goTimer = 0.8;
+      goTimer = 0.8; kickDone = false;
     }
   }
 }
@@ -897,13 +988,13 @@ function botChat(team, k, prob) {
 
 let tabHtml = '';
 function renderTabBoard(s) {
-  const pts = (st) => 100 * st[0] + 50 * st[1] + 20 * st[2] + 25 * st[3];
+  const pts = (st) => 100 * st[0] + 50 * (st[4] | 0) + 50 * st[1] + 20 * st[2] + 20 * (st[5] | 0) + 25 * st[3];
   let h = `<div class="tb-head"><span class="b">${s.score[0]}</span><small>${fmt(s.clock)}${s.overtime ? ' · prórroga' : ''}</small><span class="o">${s.score[1]}</span></div>`;
   for (const team of [0, 1]) {
     const rows = s.cars.filter((c) => c.team === team).sort((a, b) => pts(b.st) - pts(a.st));
-    h += `<table class="${team ? 'tm-o' : 'tm-b'}"><caption>${TEAM_NAMES[team]}</caption><thead><tr><th>Jugador</th><th>Puntos</th><th>Goles</th><th>Paradas</th><th>Tiros</th><th>Demos</th></tr></thead><tbody>`;
+    h += `<table class="${team ? 'tm-o' : 'tm-b'}"><caption>${TEAM_NAMES[team]}</caption><thead><tr><th>Jugador</th><th>Puntos</th><th>Goles</th><th>Asist.</th><th>Paradas</th><th>Tiros</th><th>Despejes</th><th>Demos</th></tr></thead><tbody>`;
     for (const c of rows) {
-      h += `<tr${c.id === myCarId ? ' class="me"' : ''}><td>${esc(c.name)}${c.bot ? ' (Bot)' : ''}</td><td class="pts">${pts(c.st)}</td><td>${c.st[0]}</td><td>${c.st[1]}</td><td>${c.st[2]}</td><td>${c.st[3]}</td></tr>`;
+      h += `<tr${c.id === myCarId ? ' class="me"' : ''}><td>${esc(c.name)}${c.bot ? ' (Bot)' : ''}</td><td class="pts">${pts(c.st)}</td><td>${c.st[0]}</td><td>${c.st[4] | 0}</td><td>${c.st[1]}</td><td>${c.st[2]}</td><td>${c.st[5] | 0}</td><td>${c.st[3]}</td></tr>`;
     }
     h += '</tbody></table>';
   }
@@ -1051,6 +1142,98 @@ function interpolated(dt) {
   return o;
 }
 
+// ---------- repetición del gol ----------
+// Búfer circular de ~7 s a ~30 Hz con los estados que ya se calculan (propios o recibidos).
+const REC_SEC = 7;
+const rec = [];
+let recLast = -1;
+const replay = { pending: false, wait: 0, goalT: 0, goal: null, who: '', active: false, t: 0, D: 2, fastReal: 1, u0: 0, te: 0, side: 1, sg: 1, bx: 0, cut: false, cp: null, lp: null };
+function recordState(s) {
+  if (replay.active || s.freePlay) return;
+  if (s.phase === 'countdown' || s.phase === 'ended') { rec.length = 0; recLast = -1; return; }
+  if (s.t < recLast) { rec.length = 0; recLast = -1; } // partida reiniciada
+  if (recLast >= 0 && s.t - recLast < (mode === 'online' ? 0.02 : 1 / 30 - 0.003)) return;
+  recLast = s.t; rec.push(s);
+  while (rec.length > 2 && s.t - rec[0].t > REC_SEC) rec.shift();
+}
+function blendState(a, b, t) {
+  const o = Object.assign({}, b);
+  o.ball = { ...b.ball, p: lerpPos(a.ball.p, b.ball.p, t), f: nrm(lerp3(a.ball.f, b.ball.f, t)), u: nrm(lerp3(a.ball.u, b.ball.u, t)) };
+  o.cars = b.cars.map((cb) => {
+    const ca = a.cars.find((c) => c.id === cb.id);
+    if (!ca) return cb;
+    return { ...cb, p: lerpPos(ca.p, cb.p, t), f: nrm(lerp3(ca.f, cb.f, t)), u: nrm(lerp3(ca.u, cb.u, t)) };
+  });
+  o.events = [];
+  return o;
+}
+function sampleAt(u) {
+  const n = rec.length;
+  if (u <= rec[0].t) return rec[0];
+  if (u >= rec[n - 1].t) return rec[n - 1];
+  let i = n - 2;
+  while (i > 0 && rec[i].t > u) i--;
+  const a = rec[i], b = rec[i + 1], sp = b.t - a.t;
+  return blendState(a, b, sp > 1e-6 ? (u - a.t) / sp : 1);
+}
+function startReplay(live) {
+  // Dura como mucho lo que queda de la fase de gol: acaba antes del siguiente saque.
+  const D = clampN(live.phaseTime - 0.12, 0.9, 2.3);
+  const slowReal = Math.min(1.25, D * 0.6); // último tramo en cámara lenta (0,4×)
+  const FAST = 1.6;                          // el tramo previo va algo acelerado para que quepa más jugada
+  replay.D = D; replay.fastReal = D - slowReal;
+  replay.te = Math.min(replay.goalT + 0.12, rec[rec.length - 1].t);
+  replay.u0 = replay.te - slowReal * 0.4 - replay.fastReal * FAST;
+  replay.sg = replay.goal && replay.goal.team === 1 ? -1 : 1;
+  const bt = sampleAt(replay.te).ball.p;
+  replay.bx = bt[0]; replay.side = bt[0] > 0 ? -1 : 1;
+  replay.t = 0; replay.active = true; replay.cut = false; replay.cp = null;
+  bannerTimer = 0; bannerPrio = 0; $('banner').classList.remove('show'); $('sub-banner').textContent = '';
+  const g = replay.goal;
+  $('replay-who').textContent = replay.who ? `${g && g.own ? 'Gol en propia puerta de' : 'Gol de'} ${replay.who}${g ? ' · ' + g.speed + ' km/h' : ''}` : 'Gol';
+  $('replay-skip').textContent = IS_MOBILE ? 'Toca la pantalla para saltar' : 'Pulsa Espacio o Intro para saltar';
+  show('replay', true); $('hud').classList.add('replaying');
+  R('resetTrail');
+  audio.ui('replay');
+}
+function replayStop() {
+  replay.active = false; replay.pending = false; replay.cp = null;
+  show('replay', false); $('hud').classList.remove('replaying');
+}
+function replaySkip() { if (replay.active && replay.t > 0.3) replayStop(); }
+function replayCam(st, dt) {
+  const b = st.ball.p, sg = replay.sg;
+  const cut = replay.t >= replay.fastReal;
+  let p, fov;
+  if (!cut) { p = [replay.side * 3000, clampN(b[1] - sg * 1300, -4700, 4700), 900 + b[2] * 0.25]; fov = 64; } // lateral elevado
+  else { p = [clampN(replay.bx * 0.3, -450, 450), sg * (ARENA.HY + ARENA.GD - 170), 380]; fov = 85; }   // desde detrás de la portería
+  if (replay.cut !== cut || !replay.cp) { replay.cut = cut; replay.cp = p.slice(); replay.lp = b.slice(); }
+  const k = cut ? 1 : 1 - Math.exp(-dt * 3), kl = 1 - Math.exp(-dt * (cut ? 14 : 8));
+  for (let i = 0; i < 3; i++) { replay.cp[i] += (p[i] - replay.cp[i]) * k; replay.lp[i] += (b[i] - replay.lp[i]) * kl; }
+  return { p: replay.cp, l: replay.lp, fov };
+}
+// Devuelve { state, cam } mientras dura la repetición (o null)
+function replayStep(dt, live) {
+  if (replay.pending && !replay.active) {
+    replay.wait -= dt;
+    if (replay.wait <= 0) {
+      replay.pending = false;
+      if (live.phase === 'goal' && live.phaseTime > 1.1 && rec.length > 6) startReplay(live);
+    }
+  }
+  if (!replay.active) return null;
+  replay.t += dt;
+  if (replay.t >= replay.D || live.phase !== 'goal') { replayStop(); return null; }
+  const slowReal = replay.D - replay.fastReal;
+  const u = replay.t < replay.fastReal ? replay.u0 + replay.t * 1.6 : replay.te - slowReal * 0.4 + (replay.t - replay.fastReal) * 0.4;
+  const st = sampleAt(u);
+  return { state: st, cam: replayCam(st, dt) };
+}
+window.addEventListener('keydown', (e) => {
+  if (replay.active && !e.repeat && (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'KeyA')) replaySkip();
+});
+window.addEventListener('pointerdown', () => replaySkip());
+
 // ---------- bucle ----------
 let last = performance.now();
 let cursorHidden = false;
@@ -1106,6 +1289,9 @@ function frame(now) {
   if (sel && !selPrev) trainBall(true);
   selPrev = sel;
 
+  const padA = !!(gp && gp.buttons[0] && gp.buttons[0].pressed);
+  if (padA && !padAPrev) replaySkip();
+  padAPrev = padA;
   const st9 = !!(gp && gp.buttons[9] && gp.buttons[9].pressed);
   if (st9 && !padSt9) setPause(!paused);
   padSt9 = st9;
@@ -1132,6 +1318,7 @@ function frame(now) {
           const ns = game.serialize(true);
           ns.ack = Object.fromEntries(hostAck);
           ns.events = netEvents;
+          if (netEvents.length) ns.fx = Object.fromEntries([...game.cars.map((c) => [c.id, fxOf(c.id)])]);
           netEvents = [];
           host.broadcast({ type: 'state', s: ns });
         }
@@ -1144,8 +1331,10 @@ function frame(now) {
     if (pendingEvents.length) onEvents(pendingEvents, s);
     pendingEvents = [];
     s.events = [];
+    recordState(s);
     updateHud(s, paused ? 0 : dt);
-    renderer.render(s, myCarId, paused ? 0.0001 : dt);
+    const rp = replayStep(dt, s);
+    renderer.render(rp ? rp.state : s, rp ? -1 : myCarId, paused ? 0.0001 : dt, rp ? rp.cam : undefined);
     if (!paused) audio.update(s, myCarId, dt);
   } else if (mode === 'online') {
     if (ws && now - lastSent >= 1000 / 60 - 1) {
@@ -1157,7 +1346,8 @@ function frame(now) {
     const s = withPrediction(interpolated(dt));
     if (s) {
       updateHud(latest || s, dt);
-      renderer.render(s, myCarId, dt);
+      const rp = replayStep(dt, latest || s);
+      renderer.render(rp ? rp.state : s, rp ? -1 : myCarId, dt, rp ? rp.cam : undefined);
       if (!paused) audio.update(s, myCarId, dt);
     }
   }

@@ -194,9 +194,29 @@ export function createAudio() {
         setTimeout(() => clearInterval(id), 50);
       }
     },
-    ui(kind) {
+    ui(kind, arg) {
       if (!ctx || ctx.state !== 'running') return;
       const o = out(0.35), t = ctx.currentTime;
+      if (kind === 'play') { // rótulo de jugada propia: campanita suave, más aguda cuanto más vale
+        const f = 520 + Math.min(arg || 0, 100) * 4;
+        tone('sine', f, f, 0.16, 0.6, o, t); tone('sine', f * 1.5, f * 1.5, 0.22, 0.4, o, t + 0.06);
+        return;
+      }
+      if (kind === 'warn') { // aviso de tiempo: dos notas descendentes y suaves
+        const w = out(0.5);
+        tone('sine', 740, 740, 0.22, 0.7, w, t); tone('sine', 554, 554, 0.34, 0.7, w, t + 0.2);
+        return;
+      }
+      if (kind === 'ot') { // prórroga: arpegio ascendente
+        const w = out(0.5);
+        [440, 554, 659, 880].forEach((f, i) => tone('triangle', f, f, 0.3, 0.6, w, t + i * 0.09));
+        return;
+      }
+      if (kind === 'replay') { // inicio de repetición: barrido suave
+        const w = out(0.4);
+        tone('sine', 300, 900, 0.35, 0.5, w, t); burst('bandpass', 800, 2400, 0.3, 0.25, w, 1.2);
+        return;
+      }
       if (kind === 'select') { tone('triangle', 520, 520, 0.09, 0.6, o, t); tone('triangle', 780, 780, 0.12, 0.6, o, t + 0.05); }
       else if (kind === 'back') { tone('triangle', 520, 520, 0.08, 0.5, o, t); tone('triangle', 350, 350, 0.1, 0.5, o, t + 0.05); }
       else if (kind === 'start') { tone('sawtooth', 220, 660, 0.3, 0.5, o, t); burst('bandpass', 600, 3000, 0.3, 0.4, o, 1.2); }
