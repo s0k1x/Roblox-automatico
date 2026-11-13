@@ -132,7 +132,7 @@ export function joinRoom(code, joinMsg, handlers) {
       try { peer.destroy(); } catch (e) { /* nada */ }
       reject(new Error(text));
     };
-    const timer = setTimeout(() => fail('El anfitrión no responde. Comprobad el código o probad otra red.'), 15000);
+    const timer = setTimeout(() => fail('El anfitrión no responde. Comprobad el código o probad otra red.'), 30000);
 
     peer.on('error', (e) => { if (!done) fail(errText(e)); });
     peer.on('open', () => {
