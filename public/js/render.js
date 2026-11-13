@@ -535,7 +535,7 @@ function buildStadium(scene) {
     const X = (x) => (x + HX) * sx, Y = (y) => (HY - y) * sy;
     // césped vivo con degradado suave de un lado a otro
     const base = c.createLinearGradient(0, 0, 0, h);
-    base.addColorStop(0, '#2fae4c'); base.addColorStop(0.5, '#3bc257'); base.addColorStop(1, '#2fae4c');
+    base.addColorStop(0, '#16902f'); base.addColorStop(0.5, '#1fa63a'); base.addColorStop(1, '#16902f');
     c.fillStyle = base; c.fillRect(0, 0, w, h);
     // franjas de corte alternas, bien marcadas
     const bands = 16, bh = h / bands;
@@ -558,9 +558,9 @@ function buildStadium(scene) {
         c.lineTo(X(x1 - tw / 2), Y(yIn - sg * 650)); c.lineTo(X(x1 - tw), Y(yIn));
       }
       c.closePath();
-      c.fillStyle = `rgba(${rgb},0.46)`; c.fill();
+      c.fillStyle = `rgba(${rgb},0.8)`; c.fill();
       // el área grande y el área pequeña, más saturadas, con trama diagonal
-      for (const [hw, dp, al] of [[1800, 1700, 0.30], [900, 700, 0.38]]) {
+      for (const [hw, dp, al] of [[1800, 1700, 0.3], [900, 700, 0.4]]) {
         const y0 = sg < 0 ? yEnd + dp : yEnd, y1 = sg < 0 ? yEnd : yEnd - dp;
         c.save(); c.beginPath(); c.rect(X(-hw), Y(y0), 2 * hw * sx, (y0 - y1) * sy); c.clip();
         c.fillStyle = `rgba(${rgb},${al})`; c.fillRect(0, 0, w, h);
@@ -1015,7 +1015,7 @@ export function createRenderer(canvas) {
   scene.add(hemi, amb, sun);
   // luz y exposición por mapa: el Clásico es más luminoso y contrastado
   const LOOK = {
-    clasico: { hemi: 2.5, amb: 0.7, sun: 3.0, exp: 1.12, bloom: 0.38 },
+    clasico: { hemi: 2.0, amb: 0.5, sun: 2.6, exp: 0.92, bloom: 0.38 },
     neon: { hemi: 2.6, amb: 1.1, sun: 2.0, exp: 0.95, bloom: 0.28 },
     templo: { hemi: 2.6, amb: 1.1, sun: 2.0, exp: 0.95, bloom: 0.28 },
   };
@@ -1053,7 +1053,7 @@ export function createRenderer(canvas) {
       envMs = performance.now() - t0;
     }
     scene.environment = want ? envTex : null;
-    scene.environmentIntensity = 0.9;
+    scene.environmentIntensity = 0.4;
     setFancyPaint(want);
   }
   function setPR(pr) {
@@ -1543,7 +1543,7 @@ export function createRenderer(canvas) {
           scene.add(grp);
           const label = nameSprite(c.name, c.team);
           scene.add(label);
-          const shadow = new THREE.Mesh(shadowGeo, newShadowMat(0.55));
+          const shadow = new THREE.Mesh(shadowGeo, newShadowMat(0.4));
           scene.add(shadow);
           o = { grp, label, shadow, gv: carGv(), hb: c.hb, team: c.team, pkey, tcol: trailColors(c.team, c.paint), name: c.name, hbObj: hb, acc: 0, acc2: 0, yaw: quatYaw(c.f), yr: 0, steer: 0 };
           cars.set(c.id, o);

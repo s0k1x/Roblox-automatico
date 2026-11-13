@@ -213,7 +213,7 @@ function bodyMaterial(name, m, a, b) {
   if (!mat) {
     const map = paintedTexture(name, m, a, b);
     mat = _fancy
-      ? new THREE.MeshPhysicalMaterial({ map, roughness: 0.42, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.1, emissive: 0x10141c })
+      ? new THREE.MeshPhysicalMaterial({ map, roughness: 0.5, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08, emissive: 0x10141c })
       : new THREE.MeshPhongMaterial({ map, shininess: 70, specular: 0x667788, emissive: 0x10141c });
     _matCache.set(key, mat);
   }

@@ -1065,7 +1065,7 @@ function setPerf(on) {
     document.body.appendChild(perfEl);
   }
   if (perfEl) perfEl.style.display = on ? 'block' : 'none';
-  window.__bt = on ? { get renderer() { return renderer; } } : undefined; // gancho para medir (debugFx, getStats)
+  window.__perf = on ? { get renderer() { return renderer; } } : undefined; // gancho para medir (debugFx, getStats)
 }
 if (/[?&]perf=1/.test(location.search)) setPerf(true);
 window.addEventListener('keydown', (e) => { if (e.key === 'F9') { e.preventDefault(); setPerf(!(perfEl && perfEl.style.display === 'block')); } });
