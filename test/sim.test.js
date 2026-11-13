@@ -275,4 +275,54 @@ const mkM = () => { const G = new Game({ teamSize: 1 }); for (const c of G.cars)
   ok(ev && ev.left === 30, 'aviso de «quedan 30 segundos»');
 }
 
+// ---------- IA de los bots (3v3) ----------
+// Generador con semilla para controlar la aleatoriedad de la IA y restaurar Math.random después
+const seeded = (seed) => { let t = seed >>> 0; return () => { t = (t + 0x6D2B79F5) >>> 0; let x = t; x = Math.imul(x ^ (x >>> 15), x | 1); x ^= x + Math.imul(x ^ (x >>> 7), x | 61); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; };
+const realRandom = Math.random;
+// (a) Experto (azul) contra Novato (naranja), 180 s: gana el Experto en al menos 2 de 3 semillas
+{
+  let wins = 0;
+  for (const seed of [1, 2, 3]) {
+    Math.random = seeded(seed);
+    const G = new Game({ teamSize: 3, botLevel: 1, duration: 9999 });
+    for (const c of G.cars) c.botLevel = c.team === 0 ? 2 : 0;
+    for (let i = 0; i < 180 * 120; i++) G.step();
+    if (G.score[0] > G.score[1]) wins++;
+    console.log(`  semilla ${seed}: Experto ${G.score[0]} - ${G.score[1]} Novato, toques`, G.cars.map((c) => c.touches).join(','));
+  }
+  Math.random = realRandom;
+  ok(wins >= 2, `3v3 Experto vs Novato 180 s: gana el Experto en ${wins} de 3 semillas`);
+}
+// (b) Profesional 3v3, 120 s: tocan el balón al menos 4 coches distintos y ninguno queda parado más de 10 s
+{
+  Math.random = seeded(7);
+  const G = new Game({ teamSize: 3, botLevel: 1, duration: 9999 });
+  const still = G.cars.map(() => 0); let maxStill = 0;
+  for (let i = 0; i < 120 * 120; i++) {
+    G.step();
+    G.cars.forEach((c, k) => {
+      if (G.phase === 'play' && Math.hypot(c.vel[0], c.vel[1], c.vel[2]) < 50) { if (++still[k] > maxStill) maxStill = still[k]; } else still[k] = 0;
+    });
+  }
+  Math.random = realRandom;
+  const touchers = G.cars.filter((c) => c.touches > 0).length;
+  console.log('  Profesional 120 s: marcador', G.score.join('-'), 'toques', G.cars.map((c) => c.touches).join(','), `parado máx ${(maxStill / 120).toFixed(1)} s`);
+  ok(touchers >= 4, `Profesional 3v3: tocan el balón ${touchers} coches distintos (≥ 4)`);
+  ok(maxStill / 120 <= 10, `Profesional 3v3: ningún coche parado más de 10 s (máx ${(maxStill / 120).toFixed(1)} s)`);
+}
+// (c) Rendimiento: 60 s de 3v3 de bots en menos de 2 s de CPU (se toma el mejor de dos intentos por el ruido de la máquina)
+{
+  let best = 1e9;
+  for (let r = 0; r < 2; r++) {
+    Math.random = seeded(11 + r);
+    const G = new Game({ teamSize: 3, botLevel: 1, duration: 9999 });
+    const t0 = process.cpuUsage();
+    for (let i = 0; i < 60 * 120; i++) G.step();
+    const u = process.cpuUsage(t0);
+    best = Math.min(best, (u.user + u.system) / 1e6);
+  }
+  Math.random = realRandom;
+  ok(best < 2, `60 s de 3v3 de bots: ${best.toFixed(2)} s de CPU (< 2 s)`);
+}
+
 process.exit(fails ? 1 : 0);

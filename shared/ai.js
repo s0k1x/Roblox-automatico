@@ -3,11 +3,14 @@
 // Nivel por coche: car.botLevel si existe, si no game.botLevel (0 Novato, 1 Profesional, 2 Experto).
 // Convenciones de la simulación: pitch +1 = morro arriba, yaw +1 = giro a la derecha,
 // roll +1 = inclinar a la derecha; steer negativo gira a la izquierda; en el aire handbrake + steer = roll libre.
-import { dot, len, norm, clamp, toLocal } from './vec.js';
+import { dot, norm, clamp, toLocal } from './vec.js';
 import { ARENA } from './arena.js';
 import { PHYS as P } from './constants.js';
 
 const { HX, HY, GW, GH } = ARENA;
+// Math.hypot es lento en el camino caliente: raíces explícitas.
+const hyp = (x, y) => Math.sqrt(x * x + y * y);
+const len = (a) => Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
 const R = P.BALL_RADIUS;
 const PS = 1 / 60; // paso de la predicción
 const PN = 240; // 4 s
@@ -128,7 +131,7 @@ function orient(c, inp, D, level, noise) {
 }
 
 function recover(c, inp) {
-  const vh = Math.hypot(c.vel[0], c.vel[1]);
+  const vh = hyp(c.vel[0], c.vel[1]);
   const D = vh > 300 ? [c.vel[0] / vh, c.vel[1] / vh, 0] : norm([c.o.f[0], c.o.f[1], 0], [1, 0, 0]);
   orient(c, inp, D, 0, 0);
 }
@@ -139,7 +142,7 @@ function airControl(game, c, level, ai, inp) {
   recover(c, inp);
   inp.throttle = 1;
   // Wavedash (nivel 2): flip hacia delante justo antes de tocar el suelo.
-  if (level === 2 && c.canFlip && !c.dodge && c.vel[2] < -150 && c.pos[2] < 55 && c.o.u[2] > 0.8 && Math.abs(c.o.f[2]) < 0.45 && Math.hypot(c.vel[0], c.vel[1]) > 500) {
+  if (level === 2 && c.canFlip && !c.dodge && c.vel[2] < -150 && c.pos[2] < 55 && c.o.u[2] > 0.8 && Math.abs(c.o.f[2]) < 0.45 && hyp(c.vel[0], c.vel[1]) > 500) {
     inp.jump = true; inp.pitch = -1; inp.yaw = 0; inp.roll = 0;
   }
 }
@@ -242,13 +245,20 @@ function tabAt(tab, t) {
 function findIntercept(game, X, c, level) {
   const ai = c.ai;
   if (ai.ipTick === game.tick) return ai.ip;
+  if (level === 0) {
+    // Novato: apunta al balón con una anticipación corta, sin cálculo de alcance
+    const b0 = game.ball, d0 = hyp(b0.pos[0] - c.pos[0], b0.pos[1] - c.pos[1]), t0 = clamp(d0 / 1500, 0, 0.6);
+    ai.ip = { t: d0 / 1200, x: clamp(b0.pos[0] + b0.vel[0] * t0, -HX + 200, HX - 200), y: clamp(b0.pos[1] + b0.vel[1] * t0, -HY + 200, HY - 200), z: Math.min(b0.pos[2], 140), k: 0 };
+    ai.ipTick = game.tick;
+    return ai.ip;
+  }
   const b = game.ball, p = X.pred, cx = c.pos[0], cy = c.pos[1];
-  const dx0 = b.pos[0] - cx, dy0 = b.pos[1] - cy, dn0 = Math.hypot(dx0, dy0) || 1;
+  const dx0 = b.pos[0] - cx, dy0 = b.pos[1] - cy, dn0 = hyp(dx0, dy0) || 1;
   const v0 = Math.max(0, (c.vel[0] * dx0 + c.vel[1] * dy0) / dn0);
   buildTab(c, level, v0, ai.tab);
   const cap = AERIAL_MAX[level];
   let ip = null;
-  const fx = c.o.f[0], fy = c.o.f[1], fn = Math.hypot(fx, fy) || 1;
+  const fx = c.o.f[0], fy = c.o.f[1], fn = hyp(fx, fy) || 1;
   for (let k = 2; k <= PN; k++) {
     const o = k * ST, t = p[o] - X.off, x = p[o + 1], y = p[o + 2], z = p[o + 3];
     if (t < 0.03 || Math.abs(y) > HY + 20) continue;
@@ -258,7 +268,7 @@ function findIntercept(game, X, c, level) {
     else if (z < 450) { if (level < 1) continue; startup = 0.3; }
     else if (z < cap && c.boost > 12 + z / 40) startup = 0.3 + (z - 300) / 900;
     else continue;
-    const dx = x - cx, dy = y - cy, dn = Math.hypot(dx, dy);
+    const dx = x - cx, dy = y - cy, dn = hyp(dx, dy);
     const d = Math.max(0, dn - 130);
     const cosA = dn > 1 ? (fx * dx + fy * dy) / (fn * dn) : 1;
     const turn = Math.acos(clamp(cosA, -1, 1)) * 0.2;
@@ -283,7 +293,7 @@ function teamRoles(game, X, team, level) {
   const b = game.ball;
   const bx = b.pos[0] + b.vel[0] * 0.3, by = b.pos[1] + b.vel[1] * 0.3;
   const sc = (m) => {
-    const dx = bx - m.pos[0], dy = by - m.pos[1], d = Math.hypot(dx, dy) || 1;
+    const dx = bx - m.pos[0], dy = by - m.pos[1], d = hyp(dx, dy) || 1;
     const vt = Math.max(0, (m.vel[0] * dx + m.vel[1] * dy) / d);
     let s = d - 0.4 * vt;
     if ((by - m.pos[1]) * fwd < -250) s += 1600; // fuera de posición (por delante del balón)
@@ -327,7 +337,7 @@ const _d = { angle: 0, dist: 0, vf: 0 };
 function drive(c, inp, tx, ty, o) {
   const dx = tx - c.pos[0], dy = ty - c.pos[1], f = c.o.f, l = c.o.l;
   const lf = dx * f[0] + dy * f[1], ll = dx * l[0] + dy * l[1];
-  const angle = Math.atan2(ll, lf), dist = Math.hypot(dx, dy), vf = dot(c.vel, f);
+  const angle = Math.atan2(ll, lf), dist = hyp(dx, dy), vf = dot(c.vel, f);
   _d.angle = angle; _d.dist = dist; _d.vf = vf;
   const aa = Math.abs(angle);
   if (o.rev && aa > 2.2 && dist < (o.revDist || 1200) && vf < 500) {
@@ -336,7 +346,7 @@ function drive(c, inp, tx, ty, o) {
     return _d;
   }
   inp.steer = clamp(-angle * 3.2, -1, 1);
-  const vT = o.speed === undefined ? 2300 : o.speed;
+  const vT = Math.min(o.speed === undefined ? 2300 : o.speed, o.cap || 2300);
   inp.throttle = clamp((vT - vf) / 120, -1, 1);
   if (aa > 1.75 && vf > 500 && dist > 600) { inp.handbrake = true; inp.steer = -Math.sign(angle); inp.throttle = 1; } // derrape
   else if (aa > 1.2 && vf > 1000 && dist > 800) inp.throttle = 0.3;
@@ -349,7 +359,7 @@ function bestPad(game, c, maxBig, maxSmall) {
   let best = null, bd = 1e9;
   for (const p of game.pads) {
     if (p.timer > 0.2) continue;
-    const d = Math.hypot(p.x - c.pos[0], p.y - c.pos[1]);
+    const d = hyp(p.x - c.pos[0], p.y - c.pos[1]);
     if (d > (p.big ? maxBig : maxSmall)) continue;
     const s = p.big ? d * 0.6 : d;
     if (s < bd) { bd = s; best = p; }
@@ -395,8 +405,9 @@ function groundBrain(game, X, c, level, ai, inp, dts) {
     // Dirección de tiro: hacia la portería rival o despeje a las bandas si estamos en nuestro tercio
     const depth = (ip.y - ownY) * fwd;
     let ax, ay;
+    const defensive = !kickoff && (depth < 1900 || X.threat[c.team] - X.off < 3);
     if (kickoff) { ax = 0; ay = -ownY; }
-    else if (depth < 1900 || X.threat[c.team] - X.off < 3) {
+    else if (defensive) {
       const sx = Math.abs(ip.x) > 500 ? Math.sign(ip.x) : (c.pos[0] < ip.x ? 1 : -1);
       ax = sx * HX; ay = ip.y + fwd * 2200;
     } else {
@@ -404,10 +415,15 @@ function groundBrain(game, X, c, level, ai, inp, dts) {
       ay = -ownY;
     }
     let ux = ax - ip.x, uy = ay - ip.y;
-    const un = Math.hypot(ux, uy) || 1; ux /= un; uy /= un;
+    const un = hyp(ux, uy) || 1; ux /= un; uy /= un;
+    if (defensive) {
+      // Con el coche entre el balón y nuestra portería, basta con empujar el balón lejos de ella
+      const cx = ip.x - c.pos[0], cy = ip.y - c.pos[1], cn = hyp(cx, cy) || 1;
+      if (cy * fwd / cn > 0.15) { ux = ux * 0.5 + cx / cn * 0.5; uy = uy * 0.5 + cy / cn * 0.5; const m = hyp(ux, uy) || 1; ux /= m; uy /= m; }
+    }
     const ce = Math.cos(ai.err), se = Math.sin(ai.err);
     const aimx = ux * ce - uy * se, aimy = ux * se + uy * ce;
-    const dIp = Math.hypot(ip.x - c.pos[0], ip.y - c.pos[1]);
+    const dIp = hyp(ip.x - c.pos[0], ip.y - c.pos[1]);
     const toIx = (ip.x - c.pos[0]) / (dIp || 1), toIy = (ip.y - c.pos[1]) / (dIp || 1);
     const behind = (ip.x - c.pos[0]) * aimx + (ip.y - c.pos[1]) * aimy; // >0: estamos detrás del balón respecto al tiro
     const cosAim = toIx * aimx + toIy * aimy;
@@ -417,16 +433,28 @@ function groundBrain(game, X, c, level, ai, inp, dts) {
       const px = -aimy, py = aimx;
       const s = ((c.pos[0] - ip.x) * px + (c.pos[1] - ip.y) * py) >= 0 ? 1 : -1;
       tx = ip.x - aimx * 1100 + px * s * 900; ty = ip.y - aimy * 1100 + py * s * 900;
+    } else if (defensive && (ip.y - c.pos[1]) * fwd / (dIp || 1) > 0.15) {
+      // Defendiendo con el coche entre el balón y la portería: ir directo a por el balón
+      tx = ip.x - aimx * 30; ty = ip.y - aimy * 30;
     } else if (cosAim > 0.85 || dIp < 350) {
       tx = ip.x - aimx * 60; ty = ip.y - aimy * 60;
     } else {
       const off = clamp(dIp * 0.4, 150, 800);
       tx = ip.x - aimx * off; ty = ip.y - aimy * off;
     }
+    // Poco turbo y balón lejos: desvío corto por una casilla de turbo que quede de camino
+    if (!kickoff && c.boost < 40 && ip.t > 0.9 && dIp > 1500) {
+      const pad = bestPad(game, c, 2600, 1800);
+      if (pad) {
+        const pdx = pad.x - c.pos[0], pdy = pad.y - c.pos[1], pd = hyp(pdx, pdy) || 1;
+        if ((pdx * toIx + pdy * toIy) / pd > 0.0) { tx = pad.x; ty = pad.y; onPad = true; }
+      }
+    }
     tx = clamp(tx, -HX + 250, HX - 250); ty = clamp(ty, -HY + 250, HY - 250);
-    if (!kickoff && dIp > 300 && ip.t > 0.35) speed = Math.max(300, dIp / ip.t * 1.15);
+    if (!kickoff && !onPad && dIp > 300 && dIp < 900 && ip.t > 0.35) speed = Math.max(300, dIp / ip.t * 1.15);
     if (level === 0 && speed === undefined && sp > 1450) speed = 1450;
     boostOK = level === 0 ? (c.boost > 60 && dIp > 1800) : (dIp > 700 || kickoff);
+    if (onPad) boostOK = false;
     revDist = 700;
     strike = { ip, aimx, aimy, dIp, kickoff };
   } else {
@@ -458,11 +486,11 @@ function groundBrain(game, X, c, level, ai, inp, dts) {
         if (pad) { tx = pad.x; ty = pad.y; onPad = true; }
       }
       // Volver por los lados si estamos por delante del balón
-      if ((c.pos[1] - bp[1]) * fwd > 300 && Math.hypot(tx - c.pos[0], ty - c.pos[1]) > 2500 && Math.abs(c.pos[0] - bp[0]) < 1700) {
+      if ((c.pos[1] - bp[1]) * fwd > 300 && hyp(tx - c.pos[0], ty - c.pos[1]) > 2500 && Math.abs(c.pos[0] - bp[0]) < 1700) {
         tx = (c.pos[0] >= 0 ? 1 : -1) * 2900;
       }
     }
-    const dd = Math.hypot(tx - c.pos[0], ty - c.pos[1]);
+    const dd = hyp(tx - c.pos[0], ty - c.pos[1]);
     speed = clamp(dd * 1.5, 0, 2300);
     boostOK = level > 0 && dd > 2500 && c.boost > (c.boost < 35 ? 0 : 45);
     revDist = 2200;
@@ -478,8 +506,7 @@ function groundBrain(game, X, c, level, ai, inp, dts) {
     if (Math.abs(a) < 0.9) { ai.seq = { type: 'speed', t0: game.tick, side: a > 0 ? -1 : 1 }; runSeq(game, X, c, level, ai, inp); return; }
   }
 
-  const dr = drive(c, inp, tx, ty, { speed, boost: boostOK, rev, revDist });
-  ai.dbg = [role, tx | 0, ty | 0, speed | 0];
+  const dr = drive(c, inp, tx, ty, { speed, boost: boostOK, rev, revDist, cap: level === 0 ? 900 : 0 });
 
   // Ejecución del golpeo
   if (strike) execStrike(game, X, c, level, ai, inp, strike, dr);
@@ -501,7 +528,7 @@ function execStrike(game, X, c, level, ai, inp, st, dr) {
   const hb = st.kickoff ? b.pos[2] : ballAt(X, Math.min(tt, 3), _b)[2];
   const bb = st.kickoff ? b.pos : _b;
   const ang = Math.abs(Math.atan2(toLocal(c.o, [bb[0] - c.pos[0], bb[1] - c.pos[1], 0])[1], toLocal(c.o, [bb[0] - c.pos[0], bb[1] - c.pos[1], 0])[0]));
-  const dBall = Math.hypot(bb[0] - c.pos[0], bb[1] - c.pos[1]);
+  const dBall = hyp(bb[0] - c.pos[0], bb[1] - c.pos[1]);
   const t0 = game.tick;
   if (hb < 150) {
     if (level >= 1 && tt < 0.14 && ang < 0.6 && dBall < 520 && (!st.kickoff || dBall < 480)) ai.seq = { type: 'dodge', t0 };
