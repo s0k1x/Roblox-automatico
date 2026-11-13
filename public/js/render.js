@@ -1337,12 +1337,12 @@ export function createRenderer(canvas) {
       let sx = ty * wz - tz * wy, sy = tz * wx - tx * wz, sz = tx * wy - ty * wx;
       const sl = Math.hypot(sx, sy, sz) || 1;
       const f = 1 - h[3] / life;
-      const w = BALL_R * 0.8 * f * (0.5 + 0.5 * trK) / sl;
+      const w = BALL_R * 1.0 * f * (0.5 + 0.5 * trK) / sl;
       sx *= w; sy *= w; sz *= w;
       const o = i * 6;
       trPos[o] = h[0] + sx; trPos[o + 1] = h[1] + sy; trPos[o + 2] = h[2] + sz;
       trPos[o + 3] = h[0] - sx; trPos[o + 4] = h[1] - sy; trPos[o + 5] = h[2] - sz;
-      const a = f * f * trK * 1.7, wh = f * f * f * 0.5;
+      const a = f * f * trK * 2.2, wh = f * f * f * 0.5;
       const r = (trCol3.r + wh) * a, g = (trCol3.g + wh) * a, b = (trCol3.b + wh) * a;
       trCol[o] = trCol[o + 3] = r; trCol[o + 1] = trCol[o + 4] = g; trCol[o + 2] = trCol[o + 5] = b;
     }
@@ -1400,7 +1400,7 @@ export function createRenderer(canvas) {
           const nx = P[0] + (x - P[0]) * (1 - f) * 0.9 + rnd() * 160 * sc, ny = P[1] + (y - P[1]) * (1 - f) * 0.9 + rnd() * 160 * sc, nz = P[2] + (z - P[2]) * (1 - f);
           for (let k = 0; k < 3; k++) {
             const t = k / 3;
-            particles.emit([x + (nx - x) * t, y + (ny - y) * t, z + (nz - z) * t], [0, 0, 0], 0.16 + Math.random() * 0.14, 62 * sz, col[0], col[1], col[2]);
+            particles.emit([x + (nx - x) * t, y + (ny - y) * t, z + (nz - z) * t], [0, 0, 0], 0.3 + Math.random() * 0.2, 62 * sz, col[0], col[1], col[2]);
           }
           x = nx; y = ny; z = nz;
         }
@@ -1681,11 +1681,11 @@ export function createRenderer(canvas) {
     renderMenu(dtFrame, carPreview) {
       renderMenuFrame(Math.min(0.1, Math.max(0.0001, dtFrame || 0.016)), carPreview);
     },
-    handleEvents(events, state) {
+    handleEvents(events, state, fxScale) {
       if (!events) return;
       for (const e of events) {
         if (e.type === 'goal' && e.pos) {
-          goalFx(e.fx | 0, e.pos, e.team);
+          goalFx(e.fx | 0, e.pos, e.team, fxScale || 1);
           crowdAmp = 22; crowdT = 0;
           if (camSettings.shake) cam.shake = Math.max(cam.shake, 14);
         } else if (e.type === 'demo' && e.pos) {

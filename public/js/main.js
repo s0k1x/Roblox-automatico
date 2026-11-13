@@ -1227,7 +1227,7 @@ function replayStep(dt, live) {
   const slowReal = replay.D - replay.fastReal;
   const u = replay.t < replay.fastReal ? replay.u0 + replay.t * 1.6 : replay.te - slowReal * 0.4 + (replay.t - replay.fastReal) * 0.4;
   const st = sampleAt(u);
-  if (!replay.fired && u >= replay.goalT) { replay.fired = true; renderer.handleEvents([replay.goal], st); }
+  if (!replay.fired && u >= replay.goalT) { replay.fired = true; renderer.handleEvents([replay.goal], st, 0.5); }
   return { state: st, cam: replayCam(st, dt) };
 }
 window.addEventListener('keydown', (e) => {
@@ -1334,7 +1334,7 @@ function frame(now) {
     s.events = [];
     recordState(s);
     updateHud(s, paused ? 0 : dt);
-    const rp = replayStep(dt, s);
+    const rp = replayStep(paused ? 0 : dt, s);
     renderer.render(rp ? rp.state : s, rp ? -1 : myCarId, paused ? 0.0001 : dt, rp ? rp.cam : undefined);
     if (!paused) audio.update(s, myCarId, dt);
   } else if (mode === 'online') {
@@ -1357,4 +1357,4 @@ applyAll();
 requestAnimationFrame(frame);
 
 // Útil para pruebas
-window.__bt = { get dbg() { const me = latest && latest.cars.find((c) => c.id === myCarId); return { mode, ws: !!ws, predicting, snaps: snaps.length, myCarId, phase: latest && latest.phase, hasX: !!(me && me.x), ack: latest && latest.ack, seqNo }; }, get game() { return game; }, get pred() { return predicting && pg ? { pos: pg.cars[myCarId].pos.slice(), hist: pHist.length, off: pOff.slice() } : null; } };
+window.__bt = { get replay() { return { active: replay.active, t: replay.t, D: replay.D, fired: replay.fired, rec: rec.length }; }, get dbg() { const me = latest && latest.cars.find((c) => c.id === myCarId); return { mode, ws: !!ws, predicting, snaps: snaps.length, myCarId, phase: latest && latest.phase, hasX: !!(me && me.x), ack: latest && latest.ack, seqNo }; }, get game() { return game; }, get pred() { return predicting && pg ? { pos: pg.cars[myCarId].pos.slice(), hist: pHist.length, off: pOff.slice() } : null; } };
