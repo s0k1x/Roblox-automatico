@@ -145,4 +145,49 @@ for (const [name, start, yaw] of [['pared', [2500, 0], 0], ['diagonal', [2400, 3
     `derrape: gira más (${(Math.PI / 2 - d.yaw).toFixed(2)} rad frente a ${(Math.PI / 2 - n.yaw).toFixed(2)}) y patina (${d.lat.toFixed(0)} uu/s lateral)`);
 }
 
+// Saque: las posiciones centrales miran recto (90°), las diagonales a 45°/135°
+{
+  const G = new Game({ teamSize: 3 });
+  const yawOk = G.cars.every((c) => {
+    const yaw = Math.atan2(c.o.f[1], c.o.f[0]);
+    const exp = Math.abs(c.pos[0]) < 300 ? (c.team === 0 ? Math.PI / 2 : -Math.PI / 2) : null;
+    return exp === null || Math.abs(yaw - exp) < 1e-6;
+  });
+  ok(yawOk, 'saque: coches centrales mirando recto a la portería contraria');
+}
+// Doble salto: la ventana de 1.25 s cuenta desde que termina el salto (manteniendo 0.2 s → disponible a 1.4 s)
+{
+  const G = new Game({ teamSize: 1 }); for (const c of G.cars) G.setHuman(c.id);
+  G.phase = 'play'; G.ball.pos = [3000, 3000, 93];
+  const c = G.cars[0]; G.placeCar(c, [0, -2000], Math.PI / 2);
+  // salta manteniendo 0.2 s, suelta, y vuelve a pulsar a 1.38 s
+  let vz0 = 0, vz1 = 0;
+  for (let i = 0; i < 170; i++) {
+    const t = i / 120;
+    if (i === 165) vz0 = c.vel[2];
+    G.setInput(0, { jump: t < 0.2 || (t >= 1.38 && t < 1.42) });
+    G.step();
+  }
+  vz1 = c.vel[2];
+  ok(vz1 - vz0 > 200, `doble salto a 1.38 s todavía disponible (Δvz ${(vz1 - vz0).toFixed(0)})`);
+}
+// Volcado boca abajo: al pulsar salto se endereza en menos de 1.5 s
+{
+  const G = new Game({ teamSize: 1 }); for (const c of G.cars) G.setHuman(c.id);
+  G.phase = 'play'; G.ball.pos = [3000, 3000, 93];
+  const c = G.cars[0]; G.placeCar(c, [0, -2000], Math.PI / 2);
+  c.o = { f: [0, 1, 0], l: [-1, 0, 0], u: [0, 0, -1] }; c.o.l = [1, 0, 0]; c.pos[2] = 60; c.grounded = false;
+  for (let i = 0; i < 120; i++) { G.setInput(0, {}); G.step(); }
+  for (let i = 0; i < 180; i++) { G.setInput(0, { jump: i < 4 }); G.step(); }
+  ok(c.o.u[2] > 0.9 && c.grounded, `volcado: se endereza y vuelve a ruedas (arriba z=${c.o.u[2].toFixed(2)})`);
+}
+// Sin acelerador, por debajo de 25 uu/s el coche se para del todo
+{
+  const G = new Game({ teamSize: 1 }); for (const c of G.cars) G.setHuman(c.id);
+  G.phase = 'play'; G.ball.pos = [3000, 3000, 93];
+  const c = G.cars[0]; G.placeCar(c, [0, -2000], Math.PI / 2); c.vel = [0, 20, 0];
+  G.setInput(0, {}); G.step();
+  ok(Math.abs(c.vel[1]) < 1e-6, 'frenada total por debajo de 25 uu/s sin acelerador');
+}
+
 process.exit(fails ? 1 : 0);

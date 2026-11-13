@@ -108,6 +108,11 @@ export const PHYS = {
   FLIP_BACKWARD_MAX_SPEED_SCALE: 2.5,
   FLIP_BACKWARD_SCALE_X: 16 / 15,
   SUPERSONIC_MAINTAIN_MAX: 1.0,
+  STOPPING_FORWARD_VEL: 25, // sin acelerador y por debajo de esto, frenada total
+  FLIP_PITCHLOCK_TIME: 1.0, // tras un flip el cabeceo no responde hasta 1 s
+  AUTOFLIP_IMPULSE: 200, // volcado: impulso al pulsar salto
+  AUTOFLIP_TIME: 0.4, // y giro durante 0.4 s para quedar sobre las ruedas
+  CAR_RESPAWN_Z: 36,
   BUMP_COOLDOWN: 0.25,
   BUMP_VEL_GROUND: [[0, 5 / 6], [1400, 1100], [2200, 1530]],
   BUMP_VEL_AIR: [[0, 5 / 6], [1400, 1390], [2200, 1945]],

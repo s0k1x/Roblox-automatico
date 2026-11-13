@@ -153,7 +153,7 @@ export class Game {
       mates.forEach((c, k) => {
         const s = KICKOFF_SPOTS[chosen[k]];
         const sign = team === 0 ? 1 : -1;
-        this.placeCar(c, [s[0] * sign, s[1] * sign]);
+        this.placeCar(c, [s[0] * sign, s[1] * sign], s[2] + (team === 0 ? 0 : Math.PI));
         c.boost = P.BOOST_START;
         c.dead = false;
       });
@@ -255,6 +255,8 @@ export class Game {
         const s = RESPAWN_SPOTS[c.id % RESPAWN_SPOTS.length];
         const sign = c.team === 0 ? 1 : -1;
         this.placeCar(c, [s[0] * sign, s[1] * sign], c.team === 0 ? Math.PI / 2 : -Math.PI / 2);
+        c.pos[2] = P.CAR_RESPAWN_Z; // reaparece cayendo desde un poco más alto
+        c.grounded = false;
         c.boost = P.BOOST_START;
       }
       return;
@@ -305,7 +307,7 @@ export class Game {
             dv = thr * curve(P.THROTTLE_CURVE, Math.abs(vf)) * dt;
           }
         } else {
-          dv = -Math.sign(vf) * Math.min(Math.abs(vf), P.COAST_ACCEL * dt);
+          dv = Math.abs(vf) < P.STOPPING_FORWARD_VEL ? -vf : -Math.sign(vf) * Math.min(Math.abs(vf), P.COAST_ACCEL * dt);
         }
         if (boosting) dv += P.BOOST_ACCEL * dt;
         // Freno de mano progresivo (sube en 0.2 s, baja en 0.5 s)
@@ -344,7 +346,8 @@ export class Game {
       }
     } else {
       // ---------- En el aire ----------
-      c.flipTimer += dt;
+      // La ventana de 1.25 s para el segundo salto o flip empieza al terminar el salto
+      if (!c.jumping) c.flipTimer += dt;
       if (c.jumping) {
         c.jumpTime += dt;
         if ((inp.jump || c.jumpTime < P.JUMP_MIN_TIME) && c.jumpTime < P.JUMP_HOLD_MAX) acc = addS(acc, o.u, P.JUMP_HOLD_ACCEL);
@@ -384,6 +387,12 @@ export class Game {
       if (inp.handbrake) { rollIn = clamp(rollIn + inp.steer, -1, 1); yawIn = 0; }
       const wl = toLocal(o, c.ang);
       const alpha = [0, 0, 0];
+      if (c.dodge && c.dodge.t >= P.DODGE_TIME) {
+        // Pasado el giro del flip, el cabeceo sigue bloqueado hasta FLIP_PITCHLOCK_TIME
+        c.dodge.t += dt;
+        pitchIn = 0;
+        if (c.dodge.t >= P.FLIP_PITCHLOCK_TIME) c.dodge = null;
+      }
       if (c.dodge) {
         c.dodge.t += dt;
         // Durante el flip se frena la velocidad vertical (cae menos y sube menos)
@@ -399,7 +408,6 @@ export class Game {
         wl[1] += (targetPitchW - wl[1]) * k;
         wl[0] += (targetRollW - wl[0]) * k;
         alpha[2] = -P.AIR_TORQUE_YAW * yawIn - P.AIR_DAMP_YAW * wl[2] * (1 - Math.abs(yawIn));
-        if (d.t > P.DODGE_TIME) c.dodge = null;
       } else {
         alpha[0] = P.AIR_TORQUE_ROLL * rollIn - P.AIR_DAMP_ROLL * wl[0];
         alpha[1] = -P.AIR_TORQUE_PITCH * pitchIn - P.AIR_DAMP_PITCH * wl[1] * (1 - Math.abs(pitchIn));
@@ -413,14 +421,16 @@ export class Game {
     }
     if (boosting && !c.grounded) acc = addS(acc, o.f, P.BOOST_ACCEL);
 
-    // Vuelco: si está apoyado de lado/boca abajo y pulsa salto, se endereza.
-    if (jumpPressed && c.touching && !c.grounded && !c.hasJumpedRecently) {
-      const n = c.touchN;
-      if (dot(o.u, n) < 0.6) {
-        c.vel = addS(c.vel, n, 320);
-        const axis = norm(cross(o.u, n), o.f);
-        c.ang = scale(axis, 5.5);
-      }
+    // Volcado: apoyado de lado o boca abajo, el salto da un impulso y gira el coche 0.4 s hasta las ruedas
+    if (jumpPressed && c.touching && !c.grounded && !c.hasJumpedRecently && dot(o.u, c.touchN) < 0.6) {
+      c.vel = addS(c.vel, c.touchN, P.AUTOFLIP_IMPULSE);
+      c.autoflip = { t: P.AUTOFLIP_TIME, n: c.touchN.slice() };
+    }
+    if (c.autoflip) {
+      c.autoflip.t -= dt;
+      const axis = norm(cross(o.u, c.autoflip.n), o.f);
+      if (c.autoflip.t <= 0 || dot(o.u, c.autoflip.n) > 0.9) c.autoflip = null;
+      else c.ang = scale(axis, P.CAR_MAX_ANG);
     }
 
     // Integración

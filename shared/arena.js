@@ -103,11 +103,12 @@ export const PAD = {
 
 // Posiciones de saque (equipo azul; el naranja es el reflejo punto a punto).
 export const KICKOFF_SPOTS = [
-  [-2048, -2560],
-  [2048, -2560],
-  [-256, -3840],
-  [256, -3840],
-  [0, -4608],
+  // [x, y, orientación] del equipo azul (el naranja es el reflejo punto a punto, girado 180°)
+  [-2048, -2560, Math.PI / 4],
+  [2048, -2560, (3 * Math.PI) / 4],
+  [-256, -3840, Math.PI / 2],
+  [256, -3840, Math.PI / 2],
+  [0, -4608, Math.PI / 2],
 ];
 
 export const RESPAWN_SPOTS = [
