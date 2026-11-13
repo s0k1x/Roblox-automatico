@@ -35,7 +35,7 @@ function makeCar(id, team, name, hitboxId, isBot) {
     dodge: null, // { t, pitch, roll }
     prevJump: false,
     dead: false, respawn: 0,
-    goals: 0, saves: 0, shots: 0, demos: 0, touches: 0,
+    goals: 0, saves: 0, shots: 0, demos: 0, touches: 0, assists: 0, clears: 0,
   };
 }
 
@@ -105,7 +105,8 @@ export class Game {
     this.score = [0, 0];
     this.clock = this.duration;
     this.overtime = false;
-    for (const c of this.cars) Object.assign(c, { goals: 0, saves: 0, shots: 0, demos: 0, touches: 0 });
+    for (const c of this.cars) Object.assign(c, { goals: 0, saves: 0, shots: 0, demos: 0, touches: 0, assists: 0, clears: 0 });
+    this.touchLog = [];
     this.resetKickoff();
   }
 
@@ -125,6 +126,7 @@ export class Game {
   }
 
   resetKickoff() {
+    this.touchLog = [];
     if (this.freePlay && this.cars[0] && this.tick > 0) {
       this.phase = 'play';
       this.resetBall(false);
@@ -201,7 +203,11 @@ export class Game {
     } else if (this.phase === 'play') {
       if (this.kickoffTouched && !this.freePlay) {
         if (this.overtime) this.clock += dt;
-        else this.clock = Math.max(0, this.clock - dt);
+        else {
+          const before = this.clock;
+          this.clock = Math.max(0, this.clock - dt);
+          for (const left of [60, 30]) if (before > left && this.clock <= left) this.events.push({ type: 'time', left });
+        }
       }
     }
 
@@ -629,6 +635,11 @@ export class Game {
 
     c.touches++;
     const prevTouch = this.lastTouch;
+    // Historial de toques (para asistencias): un registro por cambio de coche que toca
+    this.touchLog = this.touchLog || [];
+    const lastLog = this.touchLog[this.touchLog.length - 1];
+    if (!lastLog || lastLog.car !== c.id) { this.touchLog.push({ car: c.id, team: c.team, t: this.time }); if (this.touchLog.length > 8) this.touchLog.shift(); }
+    else lastLog.t = this.time;
     this.lastTouch = c.id;
     if (!this.kickoffTouched) this.kickoffTouched = true;
     this.events.push({ type: 'touch', car: c.id, speed: Math.round(len(b.vel)) });
@@ -639,7 +650,10 @@ export class Game {
       const t = (oppGoalY - b.pos[1]) / b.vel[1];
       if (t > 0 && t < 2) {
         const x = b.pos[0] + b.vel[0] * t;
-        if (Math.abs(x) < ARENA.GW + 100) c.shots++;
+        if (Math.abs(x) < ARENA.GW + 100 && (c.lastShotT === undefined || this.time - c.lastShotT > 1)) {
+          c.shots++; c.lastShotT = this.time;
+          this.events.push({ type: 'shot', car: c.id });
+        }
       }
     }
     if (prevTouch !== null && this.cars[prevTouch] && this.cars[prevTouch].team !== c.team) {
@@ -647,6 +661,16 @@ export class Game {
       if (Math.abs(b.pos[1] - ownY) < 1800) {
         c.saves++;
         this.events.push({ type: 'save', car: c.id });
+        c.lastClearT = this.time;
+      }
+    }
+    // Despeje: el balón estaba cerca de la propia portería y sale fuerte hacia el campo contrario
+    {
+      const ownY = c.team === 0 ? -ARENA.HY : ARENA.HY;
+      const away = -Math.sign(ownY); // dirección hacia el campo rival
+      if (Math.abs(b.pos[1] - ownY) < 2500 && b.vel[1] * away > 900 && (c.lastClearT === undefined || this.time - c.lastClearT > 2)) {
+        c.clears++; c.lastClearT = this.time;
+        this.events.push({ type: 'clear', car: c.id });
       }
     }
   }
@@ -727,9 +751,20 @@ export class Game {
     this.score[scoringTeam]++;
     let scorer = this.lastTouch !== null ? this.cars[this.lastTouch] : null;
     if (scorer && scorer.team === scoringTeam) scorer.goals++;
+    // Asistencia: el toque anterior de un compañero distinto, como mucho 5 s antes del último toque del goleador
+    let assist = null;
+    if (scorer && scorer.team === scoringTeam && this.touchLog && this.touchLog.length >= 2) {
+      const lg = this.touchLog, last = lg[lg.length - 1];
+      const prev = lg[lg.length - 2];
+      if (last.car === scorer.id && prev.team === scorer.team && prev.car !== scorer.id && last.t - prev.t <= 5) {
+        assist = this.cars[prev.car];
+        assist.assists++;
+        this.events.push({ type: 'assist', car: assist.id });
+      }
+    }
     this.events.push({
       type: 'goal', team: scoringTeam, scorer: scorer ? scorer.id : null,
-      own: scorer ? scorer.team !== scoringTeam : false,
+      own: scorer ? scorer.team !== scoringTeam : false, assist: assist ? assist.id : null,
       speed: Math.round(len(b.vel) * 0.036), pos: b.pos.slice(),
     });
     this.phase = 'goal';
@@ -790,7 +825,7 @@ export class Game {
         p: vec(c.pos), v: vec(c.vel), f: dir(c.o.f), u: dir(c.o.u),
         boost: Math.round(c.boost), boosting: c.boosting, ss: c.supersonic,
         g: c.grounded, dead: c.dead, respawn: r(c.respawn),
-        st: [c.goals, c.saves, c.shots, c.demos],
+        st: [c.goals, c.saves, c.shots, c.demos, c.assists, c.clears],
         ...(full && !c.isBot ? { x: this.exportCar(c) } : {}),
       })),
       pads: this.pads.map((p) => (p.timer > 0 ? 0 : 1)).join(''),

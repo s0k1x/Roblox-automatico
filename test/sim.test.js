@@ -257,4 +257,22 @@ const mkM = () => { const G = new Game({ teamSize: 1 }); for (const c of G.cars)
   ok(sf.hit < nb.hit - 0.05 && sf.gr && sf.up > 0.95, `speed flip: 3500 uu en ${sf.hit.toFixed(3)} s frente a ${nb.hit.toFixed(3)} s solo turbo, cae plano (${sf.up.toFixed(2)})`);
 }
 
+// Asistencia: pase de un compañero y gol del otro → asistencia para el que pasó
+{
+  const G = new Game({ teamSize: 2 }); for (const c of G.cars) G.setHuman(c.id);
+  G.phase = 'play'; G.kickoffTouched = true;
+  const [a1, a2] = G.cars.filter((c) => c.team === 0);
+  for (const c of G.cars) G.placeCar(c, [c.id * 400 - 3000, -4500], 0);
+  G.touchLog = [{ car: a1.id, team: 0, t: 0 }, { car: a2.id, team: 0, t: 1 }];
+  G.time = 1.5; G.lastTouch = a2.id; G.ball.pos = [0, 5300, 300]; G.ball.vel = [0, 1000, 0];
+  G.step();
+  ok(a2.goals === 1 && a1.assists === 1, `asistencia: gol de ${a2.name} con pase de ${a1.name}`);
+}
+// Aviso de tiempo: al cruzar 30 s restantes se emite el evento
+{
+  const G = new Game({ teamSize: 1 }); G.phase = 'play'; G.kickoffTouched = true; G.clock = 30.004;
+  let ev = null; for (let i = 0; i < 3; i++) { G.step(); ev = ev || G.events.find((e) => e.type === 'time'); }
+  ok(ev && ev.left === 30, 'aviso de «quedan 30 segundos»');
+}
+
 process.exit(fails ? 1 : 0);
