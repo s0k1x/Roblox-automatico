@@ -84,7 +84,7 @@ export function hostRoom(handlers, tries = 3) {
       conn.on('data', (m) => {
         if (!m || typeof m !== 'object') return;
         if (conn.label === 'rt') {
-          if (m.type === 'input' && p.joined) handlers.onInput(conn.peer, m.i);
+          if (m.type === 'input' && p.joined) handlers.onInput(conn.peer, m.i, m.s);
           return;
         }
         if (m.type === 'join' && !p.joined) {
@@ -156,7 +156,7 @@ export function joinRoom(code, joinMsg, handlers) {
           done = true;
           clearTimeout(timer);
           resolve({
-            sendInput(i) { if (rt.open) rt.send({ type: 'input', i }); },
+            sendInput(i, seq) { if (rt.open) rt.send({ type: 'input', i, s: seq }); },
             sendControl(obj) { if (ctl.open) ctl.send(obj); },
             close() { closed = true; try { peer.destroy(); } catch (e) { /* nada */ } },
           });

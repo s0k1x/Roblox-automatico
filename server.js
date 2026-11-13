@@ -13,6 +13,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const SHARED_DIR = path.join(ROOT, 'shared');
 const THREE_BUILD = path.join(ROOT, 'node_modules', 'three', 'build');
+const THREE_ADDONS = path.join(ROOT, 'node_modules', 'three', 'examples', 'jsm');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -20,6 +21,7 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.glb': 'model/gltf-binary',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
@@ -37,6 +39,11 @@ function mapUrl(pathname) {
   if (pathname === '/vendor/three.module.js') return path.join(THREE_BUILD, 'three.module.js');
   if (pathname === '/vendor/three.core.js') return path.join(THREE_BUILD, 'three.core.js');
   if (pathname === '/vendor/peerjs.min.js') return path.join(ROOT, 'node_modules', 'peerjs', 'dist', 'peerjs.min.js');
+  // Módulos extra de three (cargador de modelos 3D): solo archivos .js dentro de examples/jsm
+  if (pathname.startsWith('/vendor/addons/')) {
+    if (!pathname.endsWith('.js')) return null;
+    return resolveSafe(THREE_ADDONS, pathname.slice('/vendor/addons/'.length));
+  }
   if (pathname.startsWith('/shared/')) return resolveSafe(SHARED_DIR, pathname.slice('/shared/'.length));
   return resolveSafe(PUBLIC_DIR, pathname.slice(1));
 }

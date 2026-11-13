@@ -1,8 +1,99 @@
-// Carrocerías de diseño propio por clase de hitbox.
+// Carrocerías por clase de hitbox: modelos 3D de Kenney (CC0, public/models/coches) con respaldo procedural.
 // Cada función recibe (THREE, { size, off, mats, team, paint }) y devuelve
 // { group, wheels?: { wf, wb, r } } en coordenadas locales del coche
 // (x delante, y izquierda, z arriba; origen = centro de masas, 17 uu sobre el suelo).
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
 export const CUSTOM_BODIES = {};
+
+// ---------- modelos 3D de Kenney ----------
+// Archivos disponibles (suv_luxury queda libre para uso futuro) y modelo de cada clase de hitbox.
+export const CAR_MODEL_FILES = {
+  race_car_future: 'race_car_future.glb',
+  race_car: 'race_car.glb',
+  sedan_sports: 'sedan_sports.glb',
+  hatchback_sports: 'hatchback_sports.glb',
+  suv: 'suv.glb',
+  suv_luxury: 'suv_luxury.glb',
+};
+export const CAR_MODEL_FOR = {
+  estandar: 'race_car_future',
+  plano: 'race_car',
+  tabla: 'sedan_sports',
+  largo: 'sedan_sports',
+  hibrido: 'hatchback_sports',
+  alto: 'suv',
+};
+const MODELS = {}; // nombre → { root, info } ya analizado
+let loadPromise = null;
+
+// Carga todos los modelos una sola vez. Resuelve a true si ha cargado alguno; si falla (sin red), deja el respaldo.
+export function preloadCarModels() {
+  if (loadPromise) return loadPromise;
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  const base = new URL('../models/coches/', import.meta.url).href;
+  const jobs = Object.entries(CAR_MODEL_FILES).map(([name, file]) =>
+    loader.loadAsync(base + file).then((gltf) => { MODELS[name] = analyze(gltf.scene); }).catch(() => false));
+  loadPromise = Promise.all(jobs).then(() => {
+    const n = Object.keys(MODELS).length;
+    if (n < jobs.length) console.warn('Modelos de coche: se usan las carrocerías de respaldo (' + n + '/' + jobs.length + ' cargados)');
+    return n > 0;
+  });
+  return loadPromise;
+}
+export function hasCarModel(id) { return !!MODELS[CAR_MODEL_FOR[id]]; }
+
+const WHEEL_RE = /^wheel-(front|back)-(left|right)$/;
+const SW_COLS = 16, SW_ROWS = 4; // el atlas de paleta son muestras de 32 px de ancho y 128 de alto en 512x512
+
+// Mide el modelo (ejes glTF: y arriba, morro hacia +z, izquierda +x) y busca los tonos de carrocería del atlas.
+function analyze(root) {
+  root.updateMatrixWorld(true);
+  const wheelNodes = [], parts = [];
+  root.traverse((o) => {
+    if (WHEEL_RE.test(o.name)) wheelNodes.push(o);
+    else if (o.isMesh) parts.push(o);
+  });
+  const bb = new THREE.Box3();
+  for (const m of parts) bb.union(new THREE.Box3().setFromObject(m));
+  const wb = wheelNodes.map((w) => ({ name: w.name, b: new THREE.Box3().setFromObject(w) }));
+  const avg = (list, f) => list.reduce((a, w) => a + f(w), 0) / (list.length || 1);
+  const front = wb.filter((w) => /front/.test(w.name)), back = wb.filter((w) => /back/.test(w.name));
+  const cz = (w) => (w.b.min.z + w.b.max.z) / 2;
+  const info = {
+    body: bb,
+    wf: avg(front, cz), wb: avg(back, cz),
+    r: avg(wb, (w) => (w.b.max.y - w.b.min.y) / 2),
+    cy: avg(wb, (w) => (w.b.max.y + w.b.min.y) / 2),
+    track: avg(wb, (w) => Math.abs(w.b.max.x + w.b.min.x) / 2),
+    ww: avg(wb, (w) => w.b.max.x - w.b.min.x),
+    ground: wb.length ? Math.min(...wb.map((w) => w.b.min.y)) : bb.min.y,
+    swatches: new Map(), // clave col,row → área sobre la carrocería
+  };
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  for (const m of parts) {
+    const g = m.geometry, pos = g.attributes.position, uv = g.attributes.uv;
+    if (!uv) continue;
+    const n = g.index ? g.index.count : pos.count;
+    for (let i = 0; i < n; i += 3) {
+      const i0 = g.index ? g.index.getX(i) : i, i1 = g.index ? g.index.getX(i + 1) : i + 1, i2 = g.index ? g.index.getX(i + 2) : i + 2;
+      a.fromBufferAttribute(pos, i0).applyMatrix4(m.matrixWorld);
+      b.fromBufferAttribute(pos, i1).applyMatrix4(m.matrixWorld);
+      c.fromBufferAttribute(pos, i2).applyMatrix4(m.matrixWorld);
+      const area = e1.subVectors(b, a).cross(e2.subVectors(c, a)).length() / 2;
+      const u = (uv.getX(i0) + uv.getX(i1) + uv.getX(i2)) / 3, v = (uv.getY(i0) + uv.getY(i1) + uv.getY(i2)) / 3;
+      const key = Math.floor(u * SW_COLS) + ',' + Math.floor(v * SW_ROWS);
+      info.swatches.set(key, (info.swatches.get(key) || 0) + area);
+    }
+  }
+  return { root, parts, wheelNodes, info };
+}
+export function _debugModels() { return MODELS; }
+
+
 
 // ---------- utilidades de modelado ----------
 // Caja de herramientas: piezas por material que luego se funden en una sola malla.

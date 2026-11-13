@@ -718,7 +718,33 @@ export class Game {
   }
 
   // ---------- Serialización (para render y red) ----------
-  serialize() {
+  // Estado físico completo de un coche (para que el invitado prediga su propio coche).
+  exportCar(c) {
+    const r = (v) => Math.round(v * 1000) / 1000;
+    const v3 = (a) => [r(a[0]), r(a[1]), r(a[2])];
+    return {
+      p: v3(c.pos), v: v3(c.vel), w: v3(c.ang), f: v3(c.o.f), l: v3(c.o.l), u: v3(c.o.u), n: v3(c.n),
+      b: r(c.boost), bh: r(c.boostHold || 0), g: c.grounded ? 1 : 0, ng: r(c.noGround),
+      j: c.jumping ? 1 : 0, jt: r(c.jumpTime), hj: c.hasJumped ? 1 : 0, cf: c.canFlip ? 1 : 0, ft: r(c.flipTimer),
+      fr: c.flipReset ? 1 : 0, pj: c.prevJump ? 1 : 0, ss: c.supersonic ? 1 : 0, sst: r(c.ssTime || 0),
+      d: c.dodge ? [r(c.dodge.t), r(c.dodge.pitch), r(c.dodge.roll)] : null,
+      dead: c.dead ? 1 : 0,
+    };
+  }
+
+  importCar(c, x) {
+    if (!x) return;
+    c.pos = x.p.slice(); c.vel = x.v.slice(); c.ang = x.w.slice();
+    c.o = orthonormalize({ f: x.f, l: x.l, u: x.u });
+    c.n = x.n.slice();
+    c.boost = x.b; c.boostHold = x.bh; c.grounded = !!x.g; c.noGround = x.ng;
+    c.jumping = !!x.j; c.jumpTime = x.jt; c.hasJumped = !!x.hj; c.canFlip = !!x.cf; c.flipTimer = x.ft;
+    c.flipReset = !!x.fr; c.prevJump = !!x.pj; c.supersonic = !!x.ss; c.ssTime = x.sst;
+    c.dodge = x.d ? { t: x.d[0], pitch: x.d[1], roll: x.d[2] } : null;
+    c.dead = !!x.dead;
+  }
+
+  serialize(full = false) {
     const r = (v) => Math.round(v * 10) / 10;
     const r3 = (v) => Math.round(v * 1000) / 1000;
     const vec = (a) => [r(a[0]), r(a[1]), r(a[2])];
@@ -742,6 +768,7 @@ export class Game {
         boost: Math.round(c.boost), boosting: c.boosting, ss: c.supersonic,
         g: c.grounded, dead: c.dead, respawn: r(c.respawn),
         st: [c.goals, c.saves, c.shots, c.demos],
+        ...(full && !c.isBot ? { x: this.exportCar(c) } : {}),
       })),
       pads: this.pads.map((p) => (p.timer > 0 ? 0 : 1)).join(''),
       events: this.events.slice(),

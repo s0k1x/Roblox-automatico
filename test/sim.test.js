@@ -1,5 +1,5 @@
 // Pruebas rápidas de la física (node test/sim.test.js)
-import { Game } from '../shared/sim.js';
+import { Game, sanitizeInput } from '../shared/sim.js';
 import { PHYS as P } from '../shared/constants.js';
 import { wallDist } from '../shared/arena.js';
 let fails = 0;
@@ -114,6 +114,20 @@ for (const [name, start, yaw] of [['pared', [2500, 0], 0], ['diagonal', [2400, 3
   let mz = 0, wallGround = false;
   run(g, 1.5, () => { g.setInput(0, { throttle: 1 }); mz = Math.max(mz, w.pos[2]); if (w.grounded && w.n[2] < 0.3) wallGround = true; });
   ok(mz > 300 && wallGround, `sube por la ${name} (altura ${mz.toFixed(0)})`);
+}
+
+// Predicción: exportar/importar el estado de un coche y repetir entradas da el mismo resultado
+{
+  const A = new Game({ teamSize: 1 }); for (const c of A.cars) A.setHuman(c.id);
+  A.phase = 'play'; A.ball.pos = [3000, 3000, 93];
+  const seq = (i) => ({ throttle: 1, steer: Math.sin(i / 20), jump: i % 70 < 8 || (i % 70 > 14 && i % 70 < 17), pitch: i % 70 > 13 ? -1 : 0, boost: i % 50 < 25 });
+  for (let i = 0; i < 200; i++) { A.setInput(0, seq(i)); A.step(); }
+  const snap = A.serialize(true).cars[0].x;
+  const B = new Game({ teamSize: 1 }); for (const c of B.cars) B.setHuman(c.id);
+  B.importCar(B.cars[0], snap);
+  for (let i = 200; i < 320; i++) { A.setInput(0, seq(i)); A.step(); B.stepCar(B.cars[0], sanitizeInput(seq(i)), 1 / 120); }
+  const dp = Math.hypot(...A.cars[0].pos.map((v, k) => v - B.cars[0].pos[k]));
+  ok(dp < 5, `predicción del coche propio: desviación ${dp.toFixed(2)} uu tras 1 s`);
 }
 
 process.exit(fails ? 1 : 0);

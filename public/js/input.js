@@ -1,5 +1,8 @@
-// Entrada: teclado, ratón y mando combinados.
+// Entrada: teclado, ratón, mando y táctil combinados.
+import { createTouchControls } from './touch.js';
+
 export function createInput() {
+  const touch = createTouchControls();
   const keys = new Set();
   const mouse = { left: false, right: false };
   let camFlag = false;
@@ -72,6 +75,13 @@ export function createInput() {
       if (b(3) && !padCam) camFlag = true;
       padCam = b(3);
     }
+    const t = touch.read();
+    if (t) {
+      const mx = (a, b) => (Math.abs(b) > Math.abs(a) ? b : a);
+      throttle = mx(throttle, t.throttle); steer = mx(steer, t.steer); pitch = mx(pitch, t.pitch);
+      yaw = mx(yaw, t.yaw); roll = mx(roll, t.roll);
+      jump = jump || t.jump; boost = boost || t.boost; handbrake = handbrake || t.handbrake;
+    }
     return {
       throttle: clamp1(throttle), steer: clamp1(steer), pitch: clamp1(pitch),
       yaw: clamp1(yaw), roll: clamp1(roll), jump, boost, handbrake,
@@ -80,8 +90,8 @@ export function createInput() {
 
   return {
     read,
-    ballCamToggled() { const f = camFlag; camFlag = false; return f; },
+    ballCamToggled() { const f = camFlag || touch.camToggled(); camFlag = false; return f; },
     hitboxToggled() { const f = hitFlag; hitFlag = false; return f; },
-    reset() { keys.clear(); mouse.left = mouse.right = false; camFlag = hitFlag = false; },
+    reset() { touch.reset(); keys.clear(); mouse.left = mouse.right = false; camFlag = hitFlag = false; },
   };
 }

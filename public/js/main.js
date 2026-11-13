@@ -1,4 +1,4 @@
-import { Game } from '../shared/sim.js';
+import { Game, sanitizeInput } from '../shared/sim.js';
 import { HITBOXES, TEAM_COLORS, TEAM_NAMES, DT } from '../shared/constants.js';
 import { hostRoom, joinRoom } from './net.js';
 import { createInput } from './input.js';
@@ -635,9 +635,12 @@ async function startHost() {
         banner(`${game.cars[carId].name} se ha unido`, '', '#39f3c8', 2, 0);
         return { type: 'welcome', room: host ? host.code : '', carId, teamSize: game.teamSize };
       },
-      onInput(peerId, i) {
+      onInput(peerId, i, seq) {
         const carId = hostHumans.get(peerId);
-        if (carId !== undefined && game) game.setInput(carId, i);
+        if (carId !== undefined && game) {
+          game.setInput(carId, i);
+          if (Number.isFinite(seq)) hostAck.set(carId, seq);
+        }
       },
       onControl(peerId, m) {
         if (m.type === 'restart' && game && game.phase === 'ended') { game.restart(); show('endscreen', false); hudState.ended = false; }
@@ -667,7 +670,7 @@ async function startHost() {
 // ---------- Invitado ----------
 async function startOnline(code) {
   msg('Conectando con el anfitrión…');
-  snaps = []; latest = null; roomCode = '';
+  snaps = []; latest = null; roomCode = ''; resetPrediction(); seqNo = 0;
   let conn;
   try {
     conn = await joinRoom(code, { type: 'join', name: playerName(), hitbox: cfg.hitbox, paint: cfg.paint }, {
@@ -680,6 +683,7 @@ async function startOnline(code) {
           const s = m.s;
           if (latest && s.t < latest.t) return; // paquete desordenado
           latest = s;
+          reconcile(s);
           snaps.push(s);
           if (snaps.length > 80) snaps.shift();
           if (s.events && s.events.length) onEvents(s.events, s);
@@ -822,6 +826,60 @@ function showEnd(s) {
 // ---------- interpolación online ----------
 const nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+// ---------- predicción del coche propio (invitado) ----------
+// El invitado simula su coche al instante con la misma física; al llegar el estado del anfitrión
+// se coloca en él y repite las entradas que el anfitrión aún no había aplicado.
+const hostAck = new Map(); // anfitrión: última entrada aplicada por coche
+let pg = null, predicting = false, pHist = [], seqNo = 0, pAcc = 0;
+let curInp = sanitizeInput({});
+let pOff = [0, 0, 0];
+function resetPrediction() { pg = null; predicting = false; pHist = []; pAcc = 0; pOff = [0, 0, 0]; }
+function reconcile(s) {
+  const me = s.cars.find((c) => c.id === myCarId);
+  if (!me || !me.x || me.dead || s.phase === 'countdown' || s.phase === 'ended') { predicting = false; pHist = []; return; }
+  if (!pg || pg.teamSize !== s.teamSize) pg = new Game({ teamSize: s.teamSize });
+  const car = pg.cars[myCarId];
+  if (!car) { predicting = false; return; }
+  if (car.hb.id !== me.hb) pg.setHitbox(myCarId, me.hb);
+  const before = car.pos.slice();
+  const was = predicting;
+  const ack = s.ack && Number.isFinite(s.ack[myCarId]) ? s.ack[myCarId] : -1;
+  pg.importCar(car, me.x);
+  pHist = pHist.filter((h) => h.seq > ack);
+  for (const h of pHist) pg.stepCar(car, h.inp, DT);
+  if (was) {
+    for (let k = 0; k < 3; k++) pOff[k] += before[k] - car.pos[k];
+    if (Math.hypot(pOff[0], pOff[1], pOff[2]) > 400) pOff = [0, 0, 0];
+  } else pOff = [0, 0, 0];
+  predicting = true;
+}
+function stepPrediction(dt) {
+  if (!predicting || !pg) return;
+  const car = pg.cars[myCarId];
+  pAcc += dt;
+  let n = 0;
+  while (pAcc >= DT && n < 12) {
+    pg.stepCar(car, curInp, DT);
+    pHist.push({ seq: seqNo, inp: curInp });
+    pAcc -= DT; n++;
+  }
+  if (n >= 12) pAcc = 0;
+  if (pHist.length > 360) pHist.splice(0, pHist.length - 360);
+  const k = Math.exp(-dt * 10);
+  pOff = pOff.map((v) => v * k);
+}
+function withPrediction(s) {
+  if (!s || !predicting || !pg) return s;
+  const car = pg.cars[myCarId];
+  s.cars = s.cars.map((c) => (c.id !== myCarId ? c : {
+    ...c,
+    p: [car.pos[0] + pOff[0], car.pos[1] + pOff[1], car.pos[2] + pOff[2]],
+    v: car.vel.slice(), f: car.o.f.slice(), u: car.o.u.slice(),
+    g: car.grounded, boost: Math.round(car.boost), boosting: car.boosting, ss: car.supersonic,
+  }));
+  return s;
+}
+
 function lerpPos(a, b, t) {
   const d = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
   return d > 1500 ? b : lerp3(a, b, t);
@@ -890,7 +948,8 @@ function frame(now) {
         game.step();
         if (game.events.length) for (const e of game.events) { pendingEvents.push(e); if (host) netEvents.push(e); }
         if (host && ++tickCount % 3 === 0) {
-          const ns = game.serialize();
+          const ns = game.serialize(true);
+          ns.ack = Object.fromEntries(hostAck);
           ns.events = netEvents;
           netEvents = [];
           host.broadcast({ type: 'state', s: ns });
@@ -910,9 +969,11 @@ function frame(now) {
   } else if (mode === 'online') {
     if (ws && now - lastSent >= 1000 / 60 - 1) {
       lastSent = now;
-      ws.sendInput(paused ? { throttle: 0, steer: 0, pitch: 0, yaw: 0, roll: 0, jump: false, boost: false, handbrake: false } : readInput());
+      curInp = sanitizeInput(paused ? {} : readInput());
+      ws.sendInput(curInp, ++seqNo);
     }
-    const s = interpolated(dt);
+    stepPrediction(dt);
+    const s = withPrediction(interpolated(dt));
     if (s) {
       updateHud(latest || s, dt);
       renderer.render(s, myCarId, dt);
@@ -924,4 +985,4 @@ applyAll();
 requestAnimationFrame(frame);
 
 // Útil para pruebas
-window.__bt = { get game() { return game; } };
+window.__bt = { get game() { return game; }, get pred() { return predicting && pg ? { pos: pg.cars[myCarId].pos.slice(), hist: pHist.length, off: pOff.slice() } : null; } };

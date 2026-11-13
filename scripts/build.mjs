@@ -10,6 +10,12 @@ fs.cpSync(path.join(root, 'shared'), path.join(out, 'shared'), { recursive: true
 fs.mkdirSync(path.join(out, 'vendor'), { recursive: true });
 fs.copyFileSync(path.join(root, 'node_modules/three/build/three.module.js'), path.join(out, 'vendor/three.module.js'));
 fs.copyFileSync(path.join(root, 'node_modules/peerjs/dist/peerjs.min.js'), path.join(out, 'vendor/peerjs.min.js'));
+// Módulos extra de three para cargar los modelos 3D de los coches (conservan su estructura relativa).
+for (const rel of ['loaders/GLTFLoader.js', 'libs/meshopt_decoder.module.js', 'utils/BufferGeometryUtils.js']) {
+  const dst = path.join(out, 'vendor/addons', rel);
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  fs.copyFileSync(path.join(root, 'node_modules/three/examples/jsm', rel), dst);
+}
 fs.writeFileSync(path.join(out, '.nojekyll'), '');
 
 // Marca de versión en todas las rutas para que el navegador no mezcle archivos viejos y nuevos.
