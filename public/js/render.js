@@ -550,12 +550,12 @@ function buildStadium(scene) {
     }
     // zonas de color de cada equipo junto a su portería: banda ancha con borde en dientes de sierra propio
     for (const sg of [-1, 1]) {
-      const rgb = sg < 0 ? '35,120,255' : '255,128,20';
-      const yEnd = sg * s.hy * 1.02, yIn = sg * 3700, teeth = 9, tw = (2 * s.hx) / teeth;
+      const rgb = sg < 0 ? '35,120,255' : '255,140,25';
+      const yEnd = sg * s.hy * 1.02, yIn = sg * (s.hy - 2300), teeth = 7, tw = (2 * s.hx) / teeth;
       c.beginPath(); c.moveTo(X(-s.hx), Y(yEnd)); c.lineTo(X(s.hx), Y(yEnd)); c.lineTo(X(s.hx), Y(yIn));
       for (let k = 0; k < teeth; k++) {
         const x1 = s.hx - k * tw;
-        c.lineTo(X(x1 - tw / 2), Y(yIn - sg * 650)); c.lineTo(X(x1 - tw), Y(yIn));
+        c.lineTo(X(x1 - tw / 2), Y(yIn - sg * 800)); c.lineTo(X(x1 - tw), Y(yIn));
       }
       c.closePath();
       c.fillStyle = `rgba(${rgb},0.8)`; c.fill();
@@ -615,14 +615,14 @@ function buildStadium(scene) {
   root.add(walls);
 
   // Marco luminoso: bandas a ras de suelo y de techo, y postes en las aristas redondeadas
-  const frameMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  const frameMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
   const frames = [
     wallBand(wd.smp, 300, 372, 'all'),
     wallBand(wd.smp, H - 372, H - 300, 'all'),
     wallBand(wd.smp, 300, H - 300, 'post'),
     wallBand(wd.smp, GH, GH + 26, 'all'),
   ];
-  const postMat = frameMat.clone(); postMat.opacity = 0.4;
+  const postMat = frameMat.clone(); postMat.opacity = 0.26;
   frames.forEach((g, i) => { const m = new THREE.Mesh(g, i === 2 ? postMat : frameMat); m.renderOrder = 3; root.add(m); });
 
   // Porterías
