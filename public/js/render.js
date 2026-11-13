@@ -153,7 +153,7 @@ function wallBand(smp, zA, zB, only, off = EDGE_R - 2) {
 }
 
 // ---------- partículas ----------
-function createParticles(scene) {
+function createParticles(scene) { // scene: la escena propia de los efectos (se dibuja después del brillo)
   const N = 2500;
   const pos = new Float32Array(N * 3);
   const col = new Float32Array(N * 4);
@@ -171,7 +171,7 @@ function createParticles(scene) {
     uniforms: { uScale: { value: 500 }, uGain: { value: 1 } },
     vertexShader: `attribute vec4 aColor; attribute float aSize; uniform float uScale; varying vec4 vC;
       void main(){ vC=aColor; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_Position=projectionMatrix*mv; gl_PointSize=aSize*uScale/max(1.0,-mv.z); }`,
-    fragmentShader: `varying vec4 vC; uniform float uGain; void main(){ float d=length(gl_PointCoord-0.5); float a=smoothstep(0.5,0.05,d); gl_FragColor=vec4(vC.rgb*uGain, a*vC.a); }`,
+    fragmentShader: `varying vec4 vC; uniform float uGain; void main(){ float d=length(gl_PointCoord-0.5); float a=1.0-smoothstep(0.05,0.5,d); gl_FragColor=vec4(clamp(vC.rgb*uGain,0.0,3.0), clamp(a*vC.a,0.0,1.0)); }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   });
   const pts = new THREE.Points(g, mat);
@@ -180,7 +180,7 @@ function createParticles(scene) {
   scene.add(pts);
   let next = 0;
   return {
-    mat,
+    mat, pts,
     emit(p, v, lf, sz, r, gg, b) {
       const i = next; next = (next + 1) % N;
       pos[i * 3] = p[0]; pos[i * 3 + 1] = p[1]; pos[i * 3 + 2] = p[2];
@@ -537,20 +537,9 @@ function buildStadium(scene) {
     const base = c.createLinearGradient(0, 0, 0, h);
     base.addColorStop(0, '#16902f'); base.addColorStop(0.5, '#1fa63a'); base.addColorStop(1, '#16902f');
     c.fillStyle = base; c.fillRect(0, 0, w, h);
-    // franjas de corte alternas, bien marcadas
-    const bands = 16, bh = h / bands;
-    for (let k = 0; k < bands; k++) {
-      c.fillStyle = k % 2 ? 'rgba(210,255,200,0.14)' : 'rgba(0,50,10,0.16)';
-      c.fillRect(0, k * bh, w, bh);
-    }
-    // grano de césped
-    for (let i = 0; i < 34000; i++) {
-      c.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,40,0,0.07)';
-      c.fillRect(Math.random() * w, Math.random() * h, 2, 6);
-    }
     // zonas de color de cada equipo junto a su portería: banda ancha con borde en dientes de sierra propio
     for (const sg of [-1, 1]) {
-      const rgb = sg < 0 ? '35,120,255' : '255,140,25';
+      const rgb = sg < 0 ? '20,90,235' : '255,135,20';
       const yEnd = sg * s.hy * 1.02, yIn = sg * (s.hy - 2300), teeth = 7, tw = (2 * s.hx) / teeth;
       c.beginPath(); c.moveTo(X(-s.hx), Y(yEnd)); c.lineTo(X(s.hx), Y(yEnd)); c.lineTo(X(s.hx), Y(yIn));
       for (let k = 0; k < teeth; k++) {
@@ -558,7 +547,7 @@ function buildStadium(scene) {
         c.lineTo(X(x1 - tw / 2), Y(yIn - sg * 800)); c.lineTo(X(x1 - tw), Y(yIn));
       }
       c.closePath();
-      c.fillStyle = `rgba(${rgb},0.8)`; c.fill();
+      c.fillStyle = `rgba(${rgb},0.74)`; c.fill();
       // el área grande y el área pequeña, más saturadas, con trama diagonal
       for (const [hw, dp, al] of [[1800, 1700, 0.3], [900, 700, 0.4]]) {
         const y0 = sg < 0 ? yEnd + dp : yEnd, y1 = sg < 0 ? yEnd : yEnd - dp;
@@ -568,6 +557,17 @@ function buildStadium(scene) {
         for (let d = -3000; d < 3000; d += 150) { c.beginPath(); c.moveTo(X(d), Y(y0)); c.lineTo(X(d + 900), Y(y1)); c.stroke(); }
         c.restore();
       }
+    }
+    // franjas de corte alternas, bien marcadas
+    const bands = 16, bh = h / bands;
+    for (let k = 0; k < bands; k++) {
+      c.fillStyle = k % 2 ? 'rgba(225,255,225,0.15)' : 'rgba(0,30,20,0.17)';
+      c.fillRect(0, k * bh, w, bh);
+    }
+    // grano de césped
+    for (let i = 0; i < 34000; i++) {
+      c.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,40,0,0.07)';
+      c.fillRect(Math.random() * w, Math.random() * h, 2, 6);
     }
     // tinte suave de cada mitad
     c.fillStyle = 'rgba(40,110,255,0.10)'; c.fillRect(0, Y(0), w, h - Y(0));
@@ -588,6 +588,42 @@ function buildStadium(scene) {
       c.fillStyle = c.strokeStyle; c.beginPath(); c.arc(X(0), Y(yEnd - sg * 1100), 34 * sx, 0, Math.PI * 2); c.fill();
     }
   });
+  // Suelo de los mapas Neón y Templo: el dibujo sencillo de siempre (se crea solo si hace falta)
+  const drawLegacy = () => canvasTex(1536, 1920, (c, w, h) => {
+    const sx = w / (2 * HX), sy = h / (2 * HY);
+    const X = (x) => (x + HX) * sx, Y = (y) => (HY - y) * sy;
+    c.fillStyle = '#2f7a43'; c.fillRect(0, 0, w, h);
+    // franjas de corte alternas
+    const bands = 14, bh = h / bands;
+    for (let k = 0; k < bands; k++) {
+      c.fillStyle = k % 2 ? 'rgba(255,255,255,0.075)' : 'rgba(0,25,0,0.10)';
+      c.fillRect(0, k * bh, w, bh);
+    }
+    // grano de césped
+    for (let i = 0; i < 26000; i++) {
+      c.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.045)' : 'rgba(0,30,0,0.06)';
+      c.fillRect(Math.random() * w, Math.random() * h, 2, 5);
+    }
+    // tinte suave de cada mitad
+    c.fillStyle = 'rgba(40,110,255,0.13)'; c.fillRect(0, Y(0), w, h - Y(0));
+    c.fillStyle = 'rgba(255,140,40,0.13)'; c.fillRect(0, 0, w, Y(0));
+    // líneas blancas
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    c.strokeStyle = 'rgba(245,250,255,0.9)'; c.lineWidth = 7;
+    c.beginPath(); plan.forEach((p, i) => (i ? c.lineTo(X(p[0] * 0.985), Y(p[1] * 0.985)) : c.moveTo(X(p[0] * 0.985), Y(p[1] * 0.985)))); c.closePath(); c.stroke();
+    c.beginPath(); c.moveTo(X(-s.hx), Y(0)); c.lineTo(X(s.hx), Y(0)); c.stroke();
+    c.beginPath(); c.arc(X(0), Y(0), 1000 * sx, 0, Math.PI * 2); c.stroke();
+    c.beginPath(); c.arc(X(0), Y(0), 70 * sx, 0, Math.PI * 2); c.fillStyle = 'rgba(245,250,255,0.9)'; c.fill();
+    for (const sg of [-1, 1]) {
+      c.strokeStyle = sg < 0 ? 'rgba(120,185,255,0.95)' : 'rgba(255,190,120,0.95)';
+      const yEnd = sg * s.hy * 0.985;
+      c.strokeRect(X(-1800), Y(sg < 0 ? yEnd + 1700 : yEnd), 3600 * sx, 1700 * sy);
+      c.strokeRect(X(-900), Y(sg < 0 ? yEnd + 700 : yEnd), 1800 * sx, 700 * sy);
+      c.beginPath(); c.arc(X(0), Y(yEnd - sg * 1700), 600 * sx, sg < 0 ? 0 : Math.PI, sg < 0 ? Math.PI : Math.PI * 2, sg > 0); c.stroke();
+      c.fillStyle = c.strokeStyle; c.beginPath(); c.arc(X(0), Y(yEnd - sg * 1100), 28 * sx, 0, Math.PI * 2); c.fill();
+    }
+  });
+  let legacyTex = null;
   const floor = new THREE.Mesh(fg, new THREE.MeshLambertMaterial({ map: floorTex }));
   root.add(floor);
 
@@ -676,7 +712,14 @@ function buildStadium(scene) {
   }
   root.updateMatrixWorld(true);
   freezeStatic(root);
-  return root;
+  return {
+    root,
+    setClassic(v) {
+      if (!v && !legacyTex) legacyTex = drawLegacy();
+      floor.material.map = v ? floorTex : legacyTex;
+      floor.material.needsUpdate = true;
+    },
+  };
 }
 
 // ---------- balón ----------
@@ -1008,6 +1051,7 @@ export function createRenderer(canvas) {
   const camera = new THREE.PerspectiveCamera(70, 16 / 9, 10, 40000);
   camera.up.set(0, 0, 1);
 
+  const fxScene = new THREE.Scene(); // solo partículas
   const hemi = new THREE.HemisphereLight(0xe6efff, 0x6a7aa0, 2.6);
   const amb = new THREE.AmbientLight(0xffffff, 1.1);
   const sun = new THREE.DirectionalLight(0xffffff, 2.0);
@@ -1040,6 +1084,9 @@ export function createRenderer(canvas) {
     composer.addPass(new RenderPass(scene, camera));
     bloomPass = new UnrealBloomPass(new THREE.Vector2(sz.x, sz.y), (LOOK[mapId] || LOOK.neon).bloom, 0.55, 1.0);
     composer.addPass(bloomPass);
+    const fxPass = new RenderPass(fxScene, camera); // partículas: tras el brillo, para que no se mezclen con él
+    fxPass.clear = false; fxPass.clearDepth = false;
+    composer.addPass(fxPass);
     composer.addPass(new OutputPass());
     size = { w: 0, h: 0 }; // fuerza setSize del compositor
   }
@@ -1081,11 +1128,14 @@ export function createRenderer(canvas) {
     const useBloom = bloomActive();
     if (useBloom) {
       ensureComposer();
-      particles.mat.uniforms.uGain.value = 1.5;
+      particles.mat.uniforms.uGain.value = 1.2;
       composer.render(dtFrame);
     } else {
       particles.mat.uniforms.uGain.value = 1.1;
       renderer.render(scene, camera);
+      renderer.autoClear = false;
+      renderer.render(fxScene, camera);
+      renderer.autoClear = true;
     }
     stats.cpu = performance.now() - t0;
     stats.calls = renderer.info.render.calls; stats.tris = renderer.info.render.triangles;
@@ -1108,18 +1158,19 @@ export function createRenderer(canvas) {
     if (theme) { scene.remove(theme.group); theme = null; }
     mapId = id;
     const isClassic = id === 'clasico';
+    stadium.setClassic(isClassic);
     for (const o of classicObjs) o.visible = isClassic;
     scene.background = classicBg; scene.fog = classicFog;
     if (!isClassic) {
       theme = buildTheme(THREE, scene, id);
       if (theme) { scene.add(theme.group); if (theme.setQuality) theme.setQuality(quality === 'baja'); }
-      else { for (const o of classicObjs) o.visible = true; mapId = 'clasico'; }
+      else { for (const o of classicObjs) o.visible = true; mapId = 'clasico'; stadium.setClassic(true); applyLook(mapId); }
     }
   }
   applyLook(mapId);
-  buildStadium(scene);
+  const stadium = buildStadium(scene);
   const board = buildScoreboard(scene);
-  const particles = createParticles(scene);
+  const particles = createParticles(fxScene);
 
   // turbos: grandes = orbe dorado flotante con base; pequeños = disco con aro
   const pads = [];
@@ -1457,6 +1508,8 @@ export function createRenderer(canvas) {
     getEnvMs: () => envMs,
     debugFx(o) { // solo para medir: { bloom, env }
       if (o.bloom !== undefined) bloomWanted = !!o.bloom;
+      if (o.particles !== undefined) particles.pts.visible = !!o.particles;
+      if (o.shadows !== undefined) for (const c of cars.values()) c.shadow.visible = !!o.shadows;
       if (o.env !== undefined) { envOn = !!o.env; applyEnv(); }
     },
     renderMenu(dtFrame, carPreview) {
